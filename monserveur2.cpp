@@ -75,6 +75,10 @@ std::string get_mime_type(const std::string& path) {
 
 // Fonction pour servir un fichier statique
 std::string serve_file(const std::string& path) {
+    /*
+        std::ios::in : C'est un indicateur de flux qui spécifie l'ouverture du fichier en mode lecture. Cela signifie que le fichier sera ouvert pour lire son contenu.
+        std::ios::binary : C'est un autre indicateur de flux qui spécifie que le fichier doit être ouvert en mode binaire. En mode binaire, il n'y a pas de transformation de fin de ligne automatique, et le fichier est lu tel qu'il est stocké physiquement.
+    */
     std::ifstream file(path, std::ios::in | std::ios::binary);
     if (!file) {
         // Retourner une page 404
