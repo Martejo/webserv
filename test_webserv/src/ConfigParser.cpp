@@ -19,6 +19,41 @@ std::string ConfigParser::getError() const {
     return error;
 }
 
+bool ConfigParser::parse_listen_directive(std::istringstream &iss, Server &current_server, std::string &error) {
+    std::string address_port;
+    bool is_default_server = false;
+
+    // Lire l'adresse et le port
+    iss >> address_port;
+
+    // Vérifier s'il y a des options supplémentaires comme "default_server"
+    std::string option;
+    while (iss >> option) {
+        if (option == "default_server") {
+            is_default_server = true;
+        } else {
+            error = "Option inconnue dans listen directive: " + option;
+            return false;
+        }
+    }
+
+    // Vérifier si le format est IP:PORT ou juste PORT
+    size_t colon = address_port.find(':');
+    if (colon == std::string::npos) {
+        // Cas où seule un PORT est fourni (ex: "listen 80")
+        current_server.listen_ip = "0.0.0.0";  // IP par défaut pour toutes les interfaces
+        current_server.listen_port = atoi(address_port.c_str());
+    } else {
+        // Cas où IP:PORT est fourni (ex: "listen 127.0.0.1:8080")
+        current_server.listen_ip = address_port.substr(0, colon);
+        current_server.listen_port = atoi(address_port.substr(colon + 1).c_str());
+    }
+
+    // Enregistrer si c'est un serveur par défaut
+    current_server.is_default_server = is_default_server;
+    return true;
+}
+
 bool ConfigParser::parse(Config& config) {
     std::ifstream infile(filepath.c_str());
     if(!infile.is_open()) {
@@ -117,16 +152,10 @@ bool ConfigParser::parse(Config& config) {
             std::string current_context = context_stack.top();
 
             if(current_context == "server") {
-                if(directive == "listen") {
-                    std::string address_port;
-                    iss >> address_port;
-                    size_t colon = address_port.find(':');
-                    if(colon == std::string::npos) {
-                        error = "Directive listen invalide.";
-                        return false;
+                if (directive == "listen") {
+                    if (!parse_listen_directive(iss, current_server, error)) {
+                        return false;  // Arrêter le parsing si une erreur survient
                     }
-                    current_server.listen_ip = address_port.substr(0, colon);
-                    current_server.listen_port = atoi(address_port.substr(colon + 1).c_str());
                 }
                 else if(directive == "server_name") {
                     std::string name;

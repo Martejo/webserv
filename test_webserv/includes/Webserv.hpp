@@ -30,6 +30,7 @@
 #include "../includes/Config.hpp"//contenu dans configparser
 #include "../includes/Location.hpp"//contenu dans configparser
 #include "../includes/Server.hpp"//contenu dans configparser
+#include "../includes/Socket.hpp"
 
 
 // Constantes

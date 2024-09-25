@@ -24,6 +24,7 @@ private:
     // Méthodes utilitaires
     std::string trim(const std::string& str);
     bool startsWith(const std::string& str, const std::string& prefix);
+    bool parse_listen_directive(std::istringstream &iss, Server &current_server, std::string &error);
 };
 
 #endif // CONFIGPARSER_HPP

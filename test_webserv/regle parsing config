@@ -1,0 +1,34 @@
+Regles de parsing config
+
+/********************/
+
+Paramètres uniques : la dernière occurrence prend le dessus (ex. : listen, server_name, cgi on/off).
+
+Paramètres cumulatifs : plusieurs occurrences sont combinées (ex. : add_header).
+
+Blocs redondants : la première occurrence est généralement prioritaire (ex. : location).
+
+Conflits directs : Nginx renverra une erreur si des directives incompatibles sont utilisées ensemble.
+
+/*******************/
+
+Si deux bloc serveur ont la meme ip/port et server_name ----> Une erreur est genere et le programme s'arrete
+
+
+/*******************/
+
+Si aucun listen dans config ---- > Par defaut utiliser port 80 et ip 0.0.0.0 ==> fait mais tester
+
+/*******************/
+
+ Directives en doublon non autorisées
+ Par exemple si deux fois directive root dans un bloc serveur --> erreur
+ Un bloc serveur dans un bloc serveur -**> erreur
+
+ /******************/
+ Serveur par défaut explicite 
+ server {
+    listen 127.0.0.1:8080 default_server;
+    server_name _;
+    # Ce bloc est explicitement le serveur par défaut
+}
