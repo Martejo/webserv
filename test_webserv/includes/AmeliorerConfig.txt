@@ -7,3 +7,5 @@ Server + plusieurs spaces + { mal gere = indiquer une erreur specifique "keyword
 
 Mot cle n' existant pas = "keyword unsupported"
 
+Si on constate qu' un combo IP / port / server_name est deja existant il ne faut pas generer d' erreur mais pas non plus creer de serveur ?
+	on detruit le server qui etait en cours de parametrage (detruire aussi ses locations etc)
