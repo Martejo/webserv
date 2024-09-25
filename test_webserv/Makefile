@@ -4,10 +4,11 @@ CC			= c++
 
 CFLAGS		= -std=c++98 -g3 -Wall -Wextra -Werror
 
-SRC_FILES 	=	src/main.cpp \
+SRC_FILES 	=	src/main2.cpp \
 				src/HTTPHandler.cpp \
 				src/HTTPRequest.cpp \
 				src/HTTPResponse.cpp \
+				src/ConfigParser.cpp \
 
 
 OBJ			= $(SRC_FILES:.cpp=.o)
@@ -16,6 +17,10 @@ INC 		=	includes/HTTPHandler.hpp \
 				includes/HTTPRequest.hpp \
 				includes/HTTPResponse.hpp \
 				includes/Webserv.hpp \
+				includes/Config.hpp \
+				includes/ConfigParser.hpp \
+				includes/Location.hpp \
+				includes/Server.hpp \
 				
 
 %.o   : %.cpp $(INC)

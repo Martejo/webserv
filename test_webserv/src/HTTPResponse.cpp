@@ -2,10 +2,14 @@
 #include "../includes/HTTPResponse.hpp"
 #include <sstream>
 
-HTTPResponse::HTTPResponse() : status_code(200), reason_phrase("OK") {}
+// Constructeur
+HTTPResponse::HTTPResponse() : status_code(0), reason_phrase("") {}
+HTTPResponse::HTTPResponse(int code) : status_code(code), reason_phrase("") {}
 
+// Destructeur
 HTTPResponse::~HTTPResponse() {}
 
+// Méthodes Setters
 void HTTPResponse::setStatusCode(int code) {
     status_code = code;
 }
@@ -26,6 +30,7 @@ void HTTPResponse::setBody(const std::string& body_content) {
     setHeader("Content-Length", ss.str());
 }
 
+// Méthode pour convertir la réponse en chaîne de caractères
 std::string HTTPResponse::toString() const {
     std::ostringstream response_stream;
     response_stream << "HTTP/1.1 " << status_code << " " << reason_phrase << "\r\n";
@@ -39,4 +44,22 @@ std::string HTTPResponse::toString() const {
     response_stream << body;
 
     return response_stream.str();
+}
+
+// **Implémentations des Getters**
+
+int HTTPResponse::getStatusCode() const {
+    return status_code;
+}
+
+std::string HTTPResponse::getReasonPhrase() const {
+    return reason_phrase;
+}
+
+const std::map<std::string, std::string>& HTTPResponse::getHeaders() const {
+    return headers;
+}
+
+const std::string& HTTPResponse::getBody() const {
+    return body;
 }

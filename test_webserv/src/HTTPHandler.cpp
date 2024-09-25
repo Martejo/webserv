@@ -1,28 +1,7 @@
 // src/HTTPHandler.cpp
 #include "HTTPHandler.hpp"
-#include <fstream>
-#include <sstream>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <cstring> // Pour strerror
-#include <cerrno>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <fcntl.h>
 
-// Méthode pour convertir les fins de ligne \n en \r\n (si nécessaire)
-std::string convert_line_endings(const std::string& str) {
-    std::string result;
-    for (size_t i = 0; i < str.size(); ++i) {
-        if (str[i] == '\n') {
-            result += "\r\n";
-        }
-        else {
-            result += str[i];
-        }
-    }
-    return result;
-}
+
 
 HTTPHandler::HTTPHandler() {}
 
@@ -42,7 +21,13 @@ HTTPResponse HTTPHandler::handleRequest(const HTTPRequest& request) {
 }
 
 HTTPResponse HTTPHandler::handleGET(const HTTPRequest& request) {
-    HTTPResponse response;
+    // Vérifier si c'est une requête CGI
+    HTTPResponse cgi_response = detectCGI(request);
+    if (cgi_response.getStatusCode() != 0) {
+        return cgi_response;
+    }
+    std::cout << "test" << std::endl;//
+    // Traitement GET normal
     std::string uri = request.getURI();
 
     // Supprimer le query string si présent
@@ -61,10 +46,10 @@ HTTPResponse HTTPHandler::handleGET(const HTTPRequest& request) {
 
     if (S_ISDIR(st.st_mode)) {
         // Rechercher un fichier index
-        if (uri.back() != '/') {
+        if (uri.empty() || uri[uri.size()-1] != '/') {
             uri += "/";
         }
-        std::string index_path = file_path + "/index.html";
+        std::string index_path = file_path + "www/index.html";
         if (stat(index_path.c_str(), &st) == 0) {
             file_path = index_path;
         } else {
@@ -100,6 +85,8 @@ HTTPResponse HTTPHandler::handleGET(const HTTPRequest& request) {
         content_type = "application/javascript";
     }
 
+    //on pourrait mettre ca dans une fonction (hugo)
+    HTTPResponse response;
     response.setStatusCode(200);
     response.setReasonPhrase("OK");
     response.setHeader("Content-Type", content_type);
@@ -109,34 +96,18 @@ HTTPResponse HTTPHandler::handleGET(const HTTPRequest& request) {
 }
 
 HTTPResponse HTTPHandler::handlePOST(const HTTPRequest& request) {
-    HTTPResponse response;
-    std::string uri = request.getURI();
 
     // Vérifier si c'est une route de téléversement
+    std::string uri = request.getURI();
     if (uri.find("/upload") == 0) {
         return handleFileUpload(request);
-    }
-
-    // Vérifier si c'est une requête CGI
-    if (uri.find("/cgi-bin/") == 0) {
-        // Extraire le chemin du script et les paramètres de la requête
-        std::string script_path = "." + uri; // Supposons que /cgi-bin/ est dans le répertoire courant
-        std::string query_string = "";
-        size_t pos = uri.find("?");
-        if (pos != std::string::npos) {
-            query_string = uri.substr(pos + 1);
-            script_path = uri.substr(0, pos);
-        }
-
-        // Exécuter le script CGI
-        response = execute_cgi(script_path, query_string);
-        return response;
     }
 
     // Traiter le POST en fonction de l'URI
     // Exemple simplifié : echo du corps de la requête
     std::string body = request.getBody();
 
+    HTTPResponse response;
     response.setStatusCode(200);
     response.setReasonPhrase("OK");
     response.setHeader("Content-Type", "text/plain");
@@ -146,7 +117,7 @@ HTTPResponse HTTPHandler::handlePOST(const HTTPRequest& request) {
 }
 
 HTTPResponse HTTPHandler::handleDELETE(const HTTPRequest& request) {
-    HTTPResponse response;
+
     std::string uri = request.getURI();
     std::string file_path = "." + uri; // Racine du serveur : "./"
 
@@ -154,6 +125,7 @@ HTTPResponse HTTPHandler::handleDELETE(const HTTPRequest& request) {
         return generateErrorResponse(404, "Not Found");
     }
 
+    HTTPResponse response;
     response.setStatusCode(200);
     response.setReasonPhrase("OK");
     response.setHeader("Content-Type", "text/plain");
@@ -176,6 +148,29 @@ HTTPResponse HTTPHandler::generateErrorResponse(int code, const std::string& mes
     response.setBody(body);
 
     return response;
+}
+
+HTTPResponse HTTPHandler::detectCGI(const HTTPRequest& request) {
+    std::string uri = request.getURI();
+
+    // Vérifier si l'URI contient /cgi-bin/
+    size_t cgi_pos = uri.find("/cgi-bin/");
+    if (cgi_pos != std::string::npos) {
+        // Extraire le chemin du script et les paramètres de la requête
+        std::string script_path = "." + uri.substr(cgi_pos); // Assurez-vous que le chemin est correct
+        std::string query_string = "";
+        size_t pos = uri.find("?");
+        if (pos != std::string::npos) {
+            query_string = uri.substr(pos + 1);
+            script_path = uri.substr(0, pos);
+        }
+
+        // Exécuter le script CGI
+        return execute_cgi(script_path, query_string);
+    }
+
+    // Si ce n'est pas un script CGI, retourner une réponse vide ou appropriée
+    return HTTPResponse(); // Vous pouvez ajuster cela selon vos besoins
 }
 
 HTTPResponse HTTPHandler::execute_cgi(const std::string& script_path, const std::string& query_string) {
@@ -266,6 +261,19 @@ HTTPResponse HTTPHandler::execute_cgi(const std::string& script_path, const std:
 
         return response;
     }
+}
+// Méthode pour convertir les fins de ligne \n en \r\n (si nécessaire)
+std::string HTTPHandler::convert_line_endings(const std::string& str) {
+    std::string result;
+    for (size_t i = 0; i < str.size(); ++i) {
+        if (str[i] == '\n') {
+            result += "\r\n";
+        }
+        else {
+            result += str[i];
+        }
+    }
+    return result;
 }
 
 HTTPResponse HTTPHandler::handleFileUpload(const HTTPRequest& request) {

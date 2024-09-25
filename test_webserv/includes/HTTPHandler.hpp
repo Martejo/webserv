@@ -6,6 +6,7 @@
 #include "HTTPResponse.hpp"
 #include "Webserv.hpp"//a voir
 
+
 class HTTPHandler {
 public:
     HTTPHandler();
@@ -23,7 +24,9 @@ public:
 
     private:
     // Exécute un script CGI et retourne la réponse générée
+    HTTPResponse detectCGI(const HTTPRequest& request);
     HTTPResponse execute_cgi(const std::string& script_path, const std::string& query_string);
+    std::string convert_line_endings(const std::string& str);
     
     // Méthode pour gérer les téléversements de fichiers (si nécessaire)
     HTTPResponse handleFileUpload(const HTTPRequest& request);

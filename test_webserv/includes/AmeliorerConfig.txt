@@ -1,0 +1,9 @@
+Config 
+
+Detection des elements obligatoires :
+	ajouter une fonction dans chaque class (Server, location) pour checker si tous les elem mandatory sont presents
+
+Server + plusieurs spaces + { mal gere = indiquer une erreur specifique "keyword server need an opening bracket 1 space after"
+
+Mot cle n' existant pas = "keyword unsupported"
+
