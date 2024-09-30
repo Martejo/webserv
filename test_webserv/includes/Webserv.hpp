@@ -34,9 +34,7 @@
 #include "../includes/Socket.hpp"
 
 
-// Constantes
-const int PORT = 8080;
-const int BUFFER_SIZE = 4096;
+// 
 
 // Déclaration globale du socket serveur
 extern int server_fd;

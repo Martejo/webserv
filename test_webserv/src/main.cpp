@@ -148,6 +148,8 @@ int main(int argc, char **argv) {
     // Instancier un gestionnaire HTTP
     HTTPHandler handler;
 
+
+    //ATTENTION : cett boucle est contenue dans connexion loop.cpp
     while (true) {
         int ret = poll(&fds[0], fds.size(), -1); // Attendre indéfiniment
         if (ret < 0) {

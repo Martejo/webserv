@@ -6,76 +6,127 @@
 // #include <map>
 // #include "Location.hpp"
 #include "Webserv.hpp"
+
+
+/*
+	Methodologie qui serait plus pertinente que ce qui est fait actuellement : class Socket parent 
+	plus besoin de la var _status (puisqu' on peut connaitre la class)
+	
+	SocketServer() heritier1  
+	std::vector<Server &> linkedServers;
+
+
+	SocketClient()  heritier2
+	moyen de stocker l'ip du client (pour les HTTPResponses)
+
+*/
+
+
+
 class Socket {
 public:
-    // Directives de server
-	int socket_fd;
-    std::string listen_ip;
-    int listen_port;
+    std::string _status;
+	struct pollfd _poll;
+	// Directives de server
+	int _socket_fd;
+    std::string _listen_ip;
+    int _listen_port;
 	std::vector<Server &> linkedServers;
 	//ajouter un moyen d'identifier le socket dans le cas ou c' est un socket client ? **
-    struct sockaddr_in socketAddress;
+    struct sockaddr_in _socketAddress;
+
 
     // Constructeur 
 	//constructeur pour socket_server
-	Socket(Server &server) : listen_ip(server.listen_ip), listen_port(server.listen_port)
+	Socket(Server &server) : _listen_ip(server.listen_ip), _listen_port(server.listen_port), _status("server")
 	{
-		socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-		if (socket_fd == -1) {
+		_socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+		if (_socket_fd == -1) {
 			perror("socket");
 			//throw err
     }
 		linkedServers.push_back(server);
 		//faire un bloc try catch ici
-		paramSocketAddress(ipToHexa(listen_ip), portToShort(listen_port));
-		configureRulesSocket(socket_fd);
+		paramSocketAddress(ipToHexa(), portToShort());
+		configureRulesSocket();
+		activateSocket();
+		_poll.fd = server_fd;
+    	_poll.events = POLLIN; // Surveiller les connexions entrantes
 	}
 
 	//**constructeur pour socket_client (voir si il y a qq chose de special a faire)
+	Socket(std::string ) : _listen_ip(server.listen_ip), _listen_port(server.listen_port), _status("server")
+	{
+		_socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+		if (_socket_fd == -1) {
+			perror("socket");
+			//throw err
+    }
+		//faire un bloc try catch ici
+		paramSocketClientAddress(ipToHexa(), portToShort());
+		configureRulesSocket();
+		activateSocket();
+		_poll.fd = server_fd;
+    	_poll.events = POLLIN; // Surveiller les connexions entrantes
+	}
 
-	in_addr_t ipToHexa(std::string presentation_ip) 
+	void activateSocket()
+	{
+		if (bind(server_fd, (struct sockaddr*)&_socketAddress, sizeof(_socketAddress)) < 0) {
+			close(server_fd);
+			throw std::runtime_error("Bind");
+		}
+
+		// Mise en écoute du socket
+		if (listen(server_fd, 10) < 0) {
+			close(server_fd);
+			throw std::runtime_error("Listen");
+		}
+	}
+
+	in_addr_t ipToHexa() 
 	{
 		struct in_addr addr;
 		// Utilisation de inet_pton(presentation to network) pour convertir l'IP
-		if (inet_pton(AF_INET, presentation_ip.c_str(), &addr) != 1) {
+		if (inet_pton(AF_INET, _listen_ip.c_str(), &addr) != 1) {
 			throw std::runtime_error("Invalid IP address");
 		}
 		// Retourner l'adresse IP en format hexadécimal
 		return addr.s_addr;
 	}
 
-	unsigned short portToShort(int port) 
+	unsigned short portToShort() 
 	{
-		if (port < 0 || port > 65535) {
+		if (_listen_port < 0 || _listen_port > 65535) {
 			throw std::runtime_error("Invalid port number");
 		}
 		//htons adapte le num de port en fonction de l'endian utilise par le server
-		return htons(static_cast<unsigned short>(port));
+		return htons(static_cast<unsigned short>(_listen_port));
 	}
 
 	void paramSocketAddress(in_addr_t network_ip, uint16_t network_port)
 	{
 		// Configuration de l'adresse du socket
-		memset(&socketAddress, 0, sizeof(socketAddress));
+		memset(&_socketAddress, 0, sizeof(_socketAddress));
 		//se mettre sur la norme ipv4
-		socketAddress.sin_family = AF_INET;
-		socketAddress.sin_addr.s_addr = network_ip;
-		socketAddress.sin_port = network_port;
+		_socketAddress.sin_family = AF_INET;
+		_socketAddress.sin_addr.s_addr = network_ip;
+		_socketAddress.sin_port = network_port;
 	}
 
 	// Fonction pour configurer le socket : rendre non bloquant, définir SO_REUSEADDR et SO_KEEPALIVE
-	bool configureRulesSocket(int socket_fd) {
+	bool configureRulesSocket() {
 		
 		// 1. Configuration de SO_REUSEADDR
 		int opt = 1;
-		if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+		if (setsockopt(_socket_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
 			perror("setsockopt SO_REUSEADDR");
 			return false;
 		}
 
 		// 2. Activation de SO_KEEPALIVE pour détecter les connexions mortes
 		opt = 1;
-		if (setsockopt(socket_fd, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt)) < 0) {
+		if (setsockopt(_socket_fd, SOL_SOCKET, SO_KEEPALIVE, &opt, sizeof(opt)) < 0) {
 			perror("setsockopt SO_KEEPALIVE");
 			return false;
 		}
@@ -86,7 +137,7 @@ public:
 		// Tout autre flag est interdit. 
 		int flags;
 		flags |= O_NONBLOCK;
-		if (fcntl(socket_fd, F_SETFL, flags) == -1) {
+		if (fcntl(_socket_fd, F_SETFL, flags) == -1) {
 			perror("fcntl(F_SETFL)");
 			return false;
 		}
