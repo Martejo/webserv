@@ -21,6 +21,7 @@ INC 		=	includes/HTTPHandler.hpp \
 				includes/ConfigParser.hpp \
 				includes/Location.hpp \
 				includes/Server.hpp \
+				includes/Socket.hpp \
 				
 
 %.o   : %.cpp $(INC)

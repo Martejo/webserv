@@ -20,6 +20,7 @@
 #include <cstring>
 #include <sys/types.h>
 #include <cstdlib>
+#include <arpa/inet.h>
 
 // Inclure les nouvelles classes
 #include "../includes/HTTPHandler.hpp"

@@ -21,7 +21,8 @@ public:
     int client_max_body_size;
     std::map<int, std::string> error_pages;
     std::vector<Location> locations;
-    // Socket socket;//voir si c' est necessaire de lier le serveur a sa socket par la suite
+    // Socket socket_server;//voir si c' est necessaire de lier le serveur a sa socket par la suite
+    // std::vector<Socket> socket_clients //sockets qui seront g'eneres pour toute nouvelle requete client
 
     // Constructeur 
 	//Attention le listen port par defaut est peut etre gemnerateur d' erreurs
