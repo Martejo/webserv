@@ -1,5 +1,5 @@
-#ifndef SOCKET_HPP
-#define SOCKET_HPP
+#ifndef ASOCKET_HPP
+#define ASOCKET_HPP
 
 // #include <string>
 // #include <vector>
@@ -23,66 +23,28 @@
 
 
 
-class Socket {
+class ASocket {
 public:
-    std::string _status;
+    const std::string _type;
+	int _socket_fd;
+    struct sockaddr_in _socketAddress;
+
+
+    std::string _listen_ip; //uniquement pour socketserver ?
+    int _listen_port; //uniquement pour socketserver ?
+
 	struct pollfd _poll;
 	// Directives de server
-	int _socket_fd;
-    std::string _listen_ip;
-    int _listen_port;
 	std::vector<Server &> linkedServers;
 	//ajouter un moyen d'identifier le socket dans le cas ou c' est un socket client ? **
-    struct sockaddr_in _socketAddress;
 
 
     // Constructeur 
 	//constructeur pour socket_server
-	Socket(Server &server) : _listen_ip(server.listen_ip), _listen_port(server.listen_port), _status("server")
-	{
-		_socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-		if (_socket_fd == -1) {
-			perror("socket");
-			//throw err
-    }
-		linkedServers.push_back(server);
-		//faire un bloc try catch ici
-		paramSocketAddress(ipToHexa(), portToShort());
-		configureRulesSocket();
-		activateSocket();
-		_poll.fd = server_fd;
-    	_poll.events = POLLIN; // Surveiller les connexions entrantes
-	}
+	Socket(const std::string _type) : _type("server"){}
 
-	//**constructeur pour socket_client (voir si il y a qq chose de special a faire)
-	Socket(std::string ) : _listen_ip(server.listen_ip), _listen_port(server.listen_port), _status("server")
-	{
-		_socket_fd = socket(AF_INET, SOCK_STREAM, 0);
-		if (_socket_fd == -1) {
-			perror("socket");
-			//throw err
-    }
-		//faire un bloc try catch ici
-		paramSocketClientAddress(ipToHexa(), portToShort());
-		configureRulesSocket();
-		activateSocket();
-		_poll.fd = server_fd;
-    	_poll.events = POLLIN; // Surveiller les connexions entrantes
-	}
+	const std::string &getType(){return(_type);}
 
-	void activateSocket()
-	{
-		if (bind(server_fd, (struct sockaddr*)&_socketAddress, sizeof(_socketAddress)) < 0) {
-			close(server_fd);
-			throw std::runtime_error("Bind");
-		}
-
-		// Mise en écoute du socket
-		if (listen(server_fd, 10) < 0) {
-			close(server_fd);
-			throw std::runtime_error("Listen");
-		}
-	}
 
 	in_addr_t ipToHexa() 
 	{
