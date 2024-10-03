@@ -4,24 +4,30 @@ CC			= c++
 
 CFLAGS		= -std=c++98 -g3 -Wall -Wextra -Werror
 
-SRC_FILES 	=	src/main2.cpp \
-				src/HTTPHandler.cpp \
-				src/HTTPRequest.cpp \
-				src/HTTPResponse.cpp \
-				src/ConfigParser.cpp \
+SRC_FILES 	=	src/main.cpp \
+				src/HttpRequest.cpp \
+				src/HttpResponse.cpp \
+				src/ServerConfig.cpp \
+				src/RouteConfig.cpp \
+				src/WebServer.cpp \
+				src/ListeningSocket.cpp \
+				src/ListeningSocketHandler.cpp \
+				src/DataSocket.cpp \
+				src/DataSocketHandler.cpp \
+				
 
 
 OBJ			= $(SRC_FILES:.cpp=.o)
 
-INC 		=	includes/HTTPHandler.hpp \
-				includes/HTTPRequest.hpp \
-				includes/HTTPResponse.hpp \
-				includes/Webserv.hpp \
-				includes/Config.hpp \
-				includes/ConfigParser.hpp \
-				includes/Location.hpp \
-				includes/Server.hpp \
-				includes/Socket.hpp \
+INC 		=	includes/HttpRequest.hpp \
+				includes/HttpResponse.hpp \
+				includes/ServerConfig.hpp \
+				includes/RouteConfig.hpp \
+				includes/WebServer.hpp \
+				includes/ListeningSocket.hpp \
+				includes/ListeningSocketHandler.hpp \
+				includes/DataSocket.hpp \
+				includes/DataSocketHandler.hpp \
 				
 
 %.o   : %.cpp $(INC)

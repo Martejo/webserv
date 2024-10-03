@@ -4,7 +4,7 @@ La classe RouteConfig joue un rôle crucial dans l'architecture de votre serveur
 1. Gestion des Routes HTTP
 Définition des Routes : RouteConfig permet de définir les routes que votre serveur HTTP doit gérer. Chaque route représente un chemin spécifique sur lequel le serveur peut recevoir des requêtes (par exemple, /api/users ou /about).
 
-Configuration Associée : Pour chaque route, vous pouvez configurer divers paramètres, comme les méthodes HTTP acceptées (GET, POST, DELETE, etc.), le chemin vers le fichier ou le répertoire à servir, et d'autres comportements spécifiques. Cela rend la gestion des routes plus organisée et modulaire.
+Configuration Associée : Pour chaque ro.. ute, vous pouvez configurer divers paramètres, comme les méthodes HTTP acceptées (GET, POST, DELETE, etc.), le chemin vers le fichier ou le répertoire à servir, et d'autres comportements spécifiques. Cela rend la gestion des routes plus organisée et modulaire.
 
 2. Validation des Requêtes
 Méthodes Autorisées : La classe peut contenir une liste de méthodes HTTP autorisées pour chaque route. Cela permet au serveur de valider rapidement si une méthode de requête est acceptable avant d'effectuer le traitement, évitant ainsi les erreurs.
