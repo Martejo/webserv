@@ -4,11 +4,13 @@
 
 #include <string>
 #include <vector>
+#include <map>
 #include "Config.hpp"
+#include "Server.hpp"
+#include "Location.hpp"
 #include "Exceptions.hpp"
 
-class ConfigParser
-{
+class ConfigParser {
 public:
     ConfigParser(const std::string &filePath);
     ~ConfigParser();
@@ -16,23 +18,24 @@ public:
     Config parse();
 
 private:
-    // Méthodes auxiliaires
     void tokenize(const std::string &content);
+    bool isNumber(const std::string &s);
     void parseTokens();
-    void parseConfig();
     void parseServer();
     void parseLocation(Server &server);
 
-	//Utilitaires
-	bool isNumber(const std::string &s);
+    // Méthodes auxiliaires
+    void parseSimpleDirective(const std::string &directiveName, std::string &value);
+    void parseClientMaxBodySize(size_t &size);
+    void parseErrorPage(Config &config);
+    void parseErrorPage(Server &server);
+    void displayParsingResult();//afficher le resultat du parsing
 
-    // Gestion des tokens
-    std::vector<std::string> tokens_;
+    // Membres privés
     size_t currentTokenIndex_;
-
-    // Données
-    Config config_;
+    std::vector<std::string> tokens_;
     std::string filePath_;
+    Config config_;
 };
 
 #endif // CONFIGPARSER_HPP

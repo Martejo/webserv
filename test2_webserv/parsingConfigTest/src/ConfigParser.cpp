@@ -94,18 +94,108 @@ bool ConfigParser::isNumber(const std::string &s)
     return true;
 }
 
+// Méthode pour parser une directive simple avec un point-virgule
+void ConfigParser::parseSimpleDirective(const std::string &directiveName, std::string &value)
+{
+    ++currentTokenIndex_;
+    if (currentTokenIndex_ >= tokens_.size())
+        throw ParsingException("Valeur attendue après '" + directiveName + "'");
+    value = tokens_[currentTokenIndex_];
+    ++currentTokenIndex_;
+    if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != ";")
+        throw ParsingException("';' attendu après la valeur de '" + directiveName + "'");
+    ++currentTokenIndex_;
+}
+
+// Méthode pour parser 'client_max_body_size'
+void ConfigParser::parseClientMaxBodySize(size_t &size)
+{
+    ++currentTokenIndex_;
+    if (currentTokenIndex_ >= tokens_.size())
+        throw ParsingException("Valeur attendue après 'client_max_body_size'");
+    size = std::atoi(tokens_[currentTokenIndex_].c_str());
+    ++currentTokenIndex_;
+    if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != ";")
+        throw ParsingException("';' attendu après la valeur de 'client_max_body_size'");
+    ++currentTokenIndex_;
+}
+
+// Méthode pour parser 'error_page' pour Config
+void ConfigParser::parseErrorPage(Config &config)
+{
+    ++currentTokenIndex_;
+    if (currentTokenIndex_ >= tokens_.size())
+        throw ParsingException("Valeur attendue après 'error_page'");
+
+    // Collecter les codes d'état
+    std::vector<int> statusCodes;
+    while (currentTokenIndex_ < tokens_.size() && isNumber(tokens_[currentTokenIndex_]))
+    {
+        int code = atoi(tokens_[currentTokenIndex_].c_str());
+        statusCodes.push_back(code);
+        ++currentTokenIndex_;
+    }
+
+    if (statusCodes.empty())
+        throw ParsingException("Au moins un code d'état attendu après 'error_page'");
+
+    // Vérifier qu'il y a une URI après les codes d'état
+    if (currentTokenIndex_ >= tokens_.size())
+        throw ParsingException("URI attendu après les codes d'état dans 'error_page'");
+
+    std::string uri = tokens_[currentTokenIndex_];
+    ++currentTokenIndex_;
+
+    if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != ";")
+        throw ParsingException("';' attendu après l'URI de 'error_page'");
+    ++currentTokenIndex_;
+
+    // Ajouter les associations code d'état -> URI dans la configuration
+    for (size_t i = 0; i < statusCodes.size(); ++i)
+    {
+        config.addErrorPage(statusCodes[i], uri);
+    }
+}
+
+// Méthode pour parser 'error_page' pour Server
+void ConfigParser::parseErrorPage(Server &server)
+{
+    ++currentTokenIndex_;
+    if (currentTokenIndex_ >= tokens_.size())
+        throw ParsingException("Valeur attendue après 'error_page'");
+
+    // Collecter les codes d'état
+    std::vector<int> statusCodes;
+    while (currentTokenIndex_ < tokens_.size() && isNumber(tokens_[currentTokenIndex_]))
+    {
+        int code = atoi(tokens_[currentTokenIndex_].c_str());
+        statusCodes.push_back(code);
+        ++currentTokenIndex_;
+    }
+
+    if (statusCodes.empty())
+        throw ParsingException("Au moins un code d'état attendu après 'error_page'");
+
+    // Vérifier qu'il y a une URI après les codes d'état
+    if (currentTokenIndex_ >= tokens_.size())
+        throw ParsingException("URI attendu après les codes d'état dans 'error_page'");
+
+    std::string uri = tokens_[currentTokenIndex_];
+    ++currentTokenIndex_;
+
+    if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != ";")
+        throw ParsingException("';' attendu après l'URI de 'error_page'");
+    ++currentTokenIndex_;
+
+    // Ajouter les associations code d'état -> URI dans le serveur
+    for (size_t i = 0; i < statusCodes.size(); ++i)
+    {
+        server.addErrorPage(statusCodes[i], uri);
+    }
+}
+
 void ConfigParser::parseTokens()
 {
-	//test printTokens
-	// int i = 0;
-	// while ( i < tokens_.size())
-    // {
-	// 	std::cout << tokens_[i] << std::endl;//test
-	// 	i++;
-	// }
-
-	//end test printTokens
-
     while (currentTokenIndex_ < tokens_.size())
     {
         std::string token = tokens_[currentTokenIndex_];
@@ -115,54 +205,16 @@ void ConfigParser::parseTokens()
         }
         else
         {
-            // Directives globales
             if (token == "client_max_body_size")
             {
-                ++currentTokenIndex_;
-                if (currentTokenIndex_ >= tokens_.size())
-                    throw ParsingException("Valeur attendue après 'client_max_body_size'");
-                size_t size = std::atoi(tokens_[currentTokenIndex_].c_str());
+                size_t size;
+                parseClientMaxBodySize(size);
                 config_.setClientMaxBodySize(size);
-                ++currentTokenIndex_;
-                if (tokens_[currentTokenIndex_] != ";")
-                    throw ParsingException("';' attendu après la valeur de 'client_max_body_size'");
-                ++currentTokenIndex_;
             }
             else if (token == "error_page")
-        {
-            ++currentTokenIndex_;
-            if (currentTokenIndex_ >= tokens_.size())
-                throw ParsingException("Valeur attendue après 'error_page'");
-
-            // Collecter les codes d'état
-            std::vector<int> statusCodes;
-            while (currentTokenIndex_ < tokens_.size() && isNumber(tokens_[currentTokenIndex_]))
             {
-                int code = atoi(tokens_[currentTokenIndex_].c_str());
-                statusCodes.push_back(code);
-                ++currentTokenIndex_;
+                parseErrorPage(config_);
             }
-
-            if (statusCodes.empty())
-                throw ParsingException("Au moins un code d'état attendu après 'error_page'");
-
-            // Vérifier qu'il y a une URI après les codes d'état
-            if (currentTokenIndex_ >= tokens_.size())
-                throw ParsingException("URI attendu après les codes d'état dans 'error_page'");
-
-            std::string uri = tokens_[currentTokenIndex_];
-            ++currentTokenIndex_;
-
-            if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != ";")
-                throw ParsingException("';' attendu après l'URI de 'error_page'");
-            ++currentTokenIndex_;
-
-            // Ajouter les associations code d'état -> URI dans la configuration
-            for (size_t i = 0; i < statusCodes.size(); ++i)
-            {
-                config_.addErrorPage(statusCodes[i], uri);
-            }
-        }
             else
             {
                 throw ParsingException("Directive inconnue dans le contexte global: " + token);
@@ -190,14 +242,9 @@ void ConfigParser::parseServer()
         }
         else if (token == "listen")
         {
-            ++currentTokenIndex_;
-            if (currentTokenIndex_ >= tokens_.size())
-                throw ParsingException("Valeur attendue après 'listen'");
-            server.setListen(tokens_[currentTokenIndex_]);
-            ++currentTokenIndex_;
-            if (tokens_[currentTokenIndex_] != ";")
-                throw ParsingException("';' attendu après la valeur de 'listen'");
-            ++currentTokenIndex_;
+            std::string listenValue;
+            parseSimpleDirective("listen", listenValue);
+            server.setListen(listenValue);
         }
         else if (token == "server_name")
         {
@@ -213,73 +260,25 @@ void ConfigParser::parseServer()
         }
         else if (token == "root")
         {
-            ++currentTokenIndex_;
-            if (currentTokenIndex_ >= tokens_.size())
-                throw ParsingException("Valeur attendue après 'root'");
-            server.setRoot(tokens_[currentTokenIndex_]);
-            ++currentTokenIndex_;
-            if (tokens_[currentTokenIndex_] != ";")
-                throw ParsingException("';' attendu après la valeur de 'root'");
-            ++currentTokenIndex_;
+            std::string rootValue;
+            parseSimpleDirective("root", rootValue);
+            server.setRoot(rootValue);
         }
         else if (token == "index")
         {
-            ++currentTokenIndex_;
-            if (currentTokenIndex_ >= tokens_.size())
-                throw ParsingException("Valeur attendue après 'index'");
-            server.setIndex(tokens_[currentTokenIndex_]);
-            ++currentTokenIndex_;
-            if (tokens_[currentTokenIndex_] != ";")
-                throw ParsingException("';' attendu après la valeur de 'index'");
-            ++currentTokenIndex_;
+            std::string indexValue;
+            parseSimpleDirective("index", indexValue);
+            server.setIndex(indexValue);
         }
         else if (token == "error_page")
-		{
-			++currentTokenIndex_;
-			if (currentTokenIndex_ >= tokens_.size())
-				throw ParsingException("Valeur attendue après 'error_page'");
-
-			// Collecter les codes d'état
-			std::vector<int> statusCodes;
-			while (currentTokenIndex_ < tokens_.size() && isdigit(tokens_[currentTokenIndex_][0]))
-			{
-				int code = atoi(tokens_[currentTokenIndex_].c_str());
-				statusCodes.push_back(code);
-				++currentTokenIndex_;
-			}
-
-			// Vérifier qu'il y a au moins un code d'état
-			if (statusCodes.empty())
-				throw ParsingException("Au moins un code d'état attendu après 'error_page'");
-
-			// Vérifier qu'il y a une URI après les codes d'état
-			if (currentTokenIndex_ >= tokens_.size())
-				throw ParsingException("URI attendu après les codes d'état dans 'error_page'");
-
-			std::string uri = tokens_[currentTokenIndex_];
-			++currentTokenIndex_;
-
-			if (tokens_[currentTokenIndex_] != ";")
-				throw ParsingException("';' attendu après l'URI de 'error_page'");
-			++currentTokenIndex_;
-
-			// Ajouter les associations code d'état -> URI dans le serveur
-			for (size_t i = 0; i < statusCodes.size(); ++i)
-			{
-				server.addErrorPage(statusCodes[i], uri);
-			}
-		}
+        {
+            parseErrorPage(server);
+        }
         else if (token == "client_max_body_size")
         {
-            ++currentTokenIndex_;
-            if (currentTokenIndex_ >= tokens_.size())
-                throw ParsingException("Valeur attendue après 'client_max_body_size'");
-            size_t size = std::atoi(tokens_[currentTokenIndex_].c_str());
+            size_t size;
+            parseClientMaxBodySize(size);
             server.setClientMaxBodySize(size);
-            ++currentTokenIndex_;
-            if (tokens_[currentTokenIndex_] != ";")
-                throw ParsingException("';' attendu après la valeur de 'client_max_body_size'");
-            ++currentTokenIndex_;
         }
         else if (token == "location")
         {
@@ -319,25 +318,15 @@ void ConfigParser::parseLocation(Server &server)
         }
         else if (token == "root")
         {
-            ++currentTokenIndex_;
-            if (currentTokenIndex_ >= tokens_.size())
-                throw ParsingException("Valeur attendue après 'root'");
-            location.setRoot(tokens_[currentTokenIndex_]);
-            ++currentTokenIndex_;
-            if (tokens_[currentTokenIndex_] != ";")
-                throw ParsingException("';' attendu après la valeur de 'root'");
-            ++currentTokenIndex_;
+            std::string rootValue;
+            parseSimpleDirective("root", rootValue);
+            location.setRoot(rootValue);
         }
         else if (token == "index")
         {
-            ++currentTokenIndex_;
-            if (currentTokenIndex_ >= tokens_.size())
-                throw ParsingException("Valeur attendue après 'index'");
-            location.setIndex(tokens_[currentTokenIndex_]);
-            ++currentTokenIndex_;
-            if (tokens_[currentTokenIndex_] != ";")
-                throw ParsingException("';' attendu après la valeur de 'index'");
-            ++currentTokenIndex_;
+            std::string indexValue;
+            parseSimpleDirective("index", indexValue);
+            location.setIndex(indexValue);
         }
         else if (token == "autoindex")
         {
@@ -351,7 +340,7 @@ void ConfigParser::parseLocation(Server &server)
             else
                 throw ParsingException("Valeur invalide pour 'autoindex': " + tokens_[currentTokenIndex_]);
             ++currentTokenIndex_;
-            if (tokens_[currentTokenIndex_] != ";")
+            if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != ";")
                 throw ParsingException("';' attendu après la valeur de 'autoindex'");
             ++currentTokenIndex_;
         }
@@ -383,25 +372,15 @@ void ConfigParser::parseLocation(Server &server)
         }
         else if (token == "return")
         {
-            ++currentTokenIndex_;
-            if (currentTokenIndex_ >= tokens_.size())
-                throw ParsingException("Valeur attendue après 'return'");
-            location.setRedirection(tokens_[currentTokenIndex_]);
-            ++currentTokenIndex_;
-            if (tokens_[currentTokenIndex_] != ";")
-                throw ParsingException("';' attendu après la valeur de 'return'");
-            ++currentTokenIndex_;
+            std::string returnValue;
+            parseSimpleDirective("return", returnValue);
+            location.setRedirection(returnValue);
         }
         else if (token == "cgi_pass")
         {
-            ++currentTokenIndex_;
-            if (currentTokenIndex_ >= tokens_.size())
-                throw ParsingException("Valeur attendue après 'cgi_pass'");
-            location.setCgiExtension(tokens_[currentTokenIndex_]);
-            ++currentTokenIndex_;
-            if (tokens_[currentTokenIndex_] != ";")
-                throw ParsingException("';' attendu après la valeur de 'cgi_pass'");
-            ++currentTokenIndex_;
+            std::string cgiValue;
+            parseSimpleDirective("cgi_pass", cgiValue);
+            location.setCgiExtension(cgiValue);
         }
         else if (token == "upload_enable")
         {
@@ -415,20 +394,15 @@ void ConfigParser::parseLocation(Server &server)
             else
                 throw ParsingException("Valeur invalide pour 'upload_enable': " + tokens_[currentTokenIndex_]);
             ++currentTokenIndex_;
-            if (tokens_[currentTokenIndex_] != ";")
+            if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != ";")
                 throw ParsingException("';' attendu après la valeur de 'upload_enable'");
             ++currentTokenIndex_;
         }
         else if (token == "upload_store")
         {
-            ++currentTokenIndex_;
-            if (currentTokenIndex_ >= tokens_.size())
-                throw ParsingException("Valeur attendue après 'upload_store'");
-            location.setUploadStore(tokens_[currentTokenIndex_]);
-            ++currentTokenIndex_;
-            if (tokens_[currentTokenIndex_] != ";")
-                throw ParsingException("';' attendu après la valeur de 'upload_store'");
-            ++currentTokenIndex_;
+            std::string uploadStoreValue;
+            parseSimpleDirective("upload_store", uploadStoreValue);
+            location.setUploadStore(uploadStoreValue);
         }
         else
         {
@@ -437,4 +411,79 @@ void ConfigParser::parseLocation(Server &server)
     }
 
     server.addLocation(location);
+}
+
+void ConfigParser::displayParsingResult(){
+// Exemple d'affichage des données parsées
+    std::cout << "client_max_body_size global: " << config.getClientMaxBodySize() << std::endl;
+
+    // Affichage des pages d'erreur globales
+    const std::map<int, std::string> &globalErrorPages = config.getErrorPages();
+    for (std::map<int, std::string>::const_iterator it = globalErrorPages.begin(); it != globalErrorPages.end(); ++it)
+    {
+        std::cout << "error_page " << it->first << " : " << it->second << std::endl;
+    }
+
+    const std::vector<Server> &servers = config.getServers();
+    for (size_t i = 0; i < servers.size(); ++i)
+    {
+        const Server &server = servers[i];
+        std::cout << "Serveur " << i << ":" << std::endl;
+        std::cout << "  listen: " << server.getListen() << std::endl;
+
+        // Affichage des server_name du serveur
+        const std::vector<std::string> &serverNames = server.getServerNames();
+        for (size_t j = 0; j < serverNames.size(); ++j)
+        {
+            std::cout << "  server_name: " << serverNames[j] << std::endl;
+        }
+
+        // Affichage des pages d'erreur du serveur
+        const std::map<int, std::string> &serverErrorPages = server.getErrorPages();
+        for (std::map<int, std::string>::const_iterator it = serverErrorPages.begin(); it != serverErrorPages.end(); ++it)
+        {
+            std::cout << "  error_page " << it->first << " : " << it->second << std::endl;
+        }
+
+        // Affichage du contenu des Locations du serveur
+        const std::vector<Location> &locations = server.getLocations();
+        for (size_t k = 0; k < locations.size(); ++k)
+        {
+            const Location &location = locations[k];
+            std::cout << "  Location " << location.getPath() << ":" << std::endl;
+            std::cout << "    root: " << location.getRoot() << std::endl;
+            std::cout << "    index: " << location.getIndex() << std::endl;
+            std::cout << "    autoindex: " << (location.getAutoIndex() ? "on" : "off") << std::endl;
+
+            // Afficher les méthodes autorisées
+            const std::vector<std::string> &methods = location.getAllowedMethods();
+            if (!methods.empty())
+            {
+                std::cout << "    allowed_methods:";
+                for (size_t m = 0; m < methods.size(); ++m)
+                {
+                    std::cout << " " << methods[m];
+                }
+                std::cout << std::endl;
+            }
+
+            // Afficher d'autres informations si nécessaire
+            if (!location.getRedirection().empty())
+            {
+                std::cout << "    redirection: " << location.getRedirection() << std::endl;
+            }
+
+            if (!location.getCgiExtension().empty())
+            {
+                std::cout << "    cgi_pass: " << location.getCgiExtension() << std::endl;
+            }
+
+            std::cout << "    upload_enable: " << (location.getUploadEnable() ? "on" : "off") << std::endl;
+
+            if (!location.getUploadStore().empty())
+            {
+                std::cout << "    upload_store: " << location.getUploadStore() << std::endl;
+            }
+        }
+    }
 }
