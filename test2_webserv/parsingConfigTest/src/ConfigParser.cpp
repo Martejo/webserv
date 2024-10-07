@@ -412,19 +412,19 @@ void ConfigParser::parseLocation(Server &server)
 
     server.addLocation(location);
 }
-
+/////
 void ConfigParser::displayParsingResult(){
 // Exemple d'affichage des données parsées
-    std::cout << "client_max_body_size global: " << config.getClientMaxBodySize() << std::endl;
+    std::cout << "client_max_body_size global: " << config_.getClientMaxBodySize() << std::endl;
 
     // Affichage des pages d'erreur globales
-    const std::map<int, std::string> &globalErrorPages = config.getErrorPages();
+    const std::map<int, std::string> &globalErrorPages = config_.getErrorPages();
     for (std::map<int, std::string>::const_iterator it = globalErrorPages.begin(); it != globalErrorPages.end(); ++it)
     {
         std::cout << "error_page " << it->first << " : " << it->second << std::endl;
     }
 
-    const std::vector<Server> &servers = config.getServers();
+    const std::vector<Server> &servers = config_.getServers();
     for (size_t i = 0; i < servers.size(); ++i)
     {
         const Server &server = servers[i];
