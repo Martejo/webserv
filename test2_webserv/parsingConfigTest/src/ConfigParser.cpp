@@ -412,7 +412,7 @@ void ConfigParser::parseLocation(Server &server)
 
     server.addLocation(location);
 }
-/////
+
 void ConfigParser::displayParsingResult(){
 // Exemple d'affichage des données parsées
     std::cout << "client_max_body_size global: " << config_.getClientMaxBodySize() << std::endl;

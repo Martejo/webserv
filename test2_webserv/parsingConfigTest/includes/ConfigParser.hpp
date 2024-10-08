@@ -16,6 +16,7 @@ public:
     ~ConfigParser();
 
     Config parse();
+    void displayParsingResult();//afficher le resultat du parsing
 
 private:
     void tokenize(const std::string &content);
@@ -29,7 +30,6 @@ private:
     void parseClientMaxBodySize(size_t &size);
     void parseErrorPage(Config &config);
     void parseErrorPage(Server &server);
-    void displayParsingResult();//afficher le resultat du parsing
 
     // Membres privés
     size_t currentTokenIndex_;

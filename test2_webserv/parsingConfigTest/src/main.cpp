@@ -16,8 +16,7 @@ int main(int argc, char *argv[])
     {
         ConfigParser parser(configFile);
         Config config = parser.parse();
-
-        
+        parser.displayParsingResult();
     }
     catch (const ParsingException &e)
     {
