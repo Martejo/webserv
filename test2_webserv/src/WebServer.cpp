@@ -4,32 +4,36 @@
 #include <sstream>
 #include <stdexcept>
 
-WebServer::WebServer() {
-    // Constructeur par défaut : initialisation si nécessaire
-}
+// Constructeur par défaut : initialisation si nécessaire
+WebServer::WebServer() {}
 
-void WebServer::loadConfiguration(const std::string& configFile) {
-    std::ifstream file(configFile);
-    if (!file.is_open()) {
-        throw std::runtime_error("Erreur lors de l'ouverture du fichier de configuration.");
+// Charge les configurations à partir du fichier
+void WebServer::loadConfiguration(const std::string& configFile) 
+{
+    try
+    {
+        ConfigParser parser(configFile);
+        Config config = parser.parse();
+        parser.displayParsingResult();
+    }
+    catch (const ParsingException &e)
+    {
+        std::cerr << "Erreur de parsing: " << e.what() << std::endl;
+        return 1;
     }
 
-    std::string line;
-    while (std::getline(file, line)) {
-        // Parsing du fichier de configuration pour extraire les blocs server
-        ServerConfig serverConfig;
-        serverConfig.parseConfig(line);
-        serverConfigs.push_back(serverConfig);
-    }
+    return 0;
 }
 
+// Démarre le serveur
 void WebServer::start() {
-    for (const auto& config : serverConfigs) {
-        listeningHandler.addListeningSocket(config); // Crée des sockets d'écoute pour chaque serveur
+    for (std::vector<ServerConfig>::const_iterator it = serverConfigs.begin(); it != serverConfigs.end(); ++it) {
+        listeningHandler.addListeningSocket(*it); // Crée des sockets d'écoute pour chaque serveur
     }
     std::cout << "Serveur démarré avec " << serverConfigs.size() << " serveurs." << std::endl;
 }
 
+// Gère les connexions
 void WebServer::handleConnections() {
     while (true) {
         listeningHandler.handleListeningSockets(); // Surveille les sockets d'écoute
@@ -37,6 +41,7 @@ void WebServer::handleConnections() {
     }
 }
 
+// Nettoie les ressources et ferme les sockets
 void WebServer::cleanUp() {
     // Ferme les sockets et nettoie les ressources
     listeningHandler.cleanUp(); // Assurez-vous d'avoir cette méthode dans ListeningSocketHandler

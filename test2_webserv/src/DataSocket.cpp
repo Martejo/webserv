@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <cstdio> // Pour perror
 
 DataSocket::DataSocket(int fd) : client_fd(fd) {
     // Initialisation du socket client
@@ -20,15 +21,15 @@ std::string DataSocket::receiveData() {
     ssize_t bytes_received = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
     if (bytes_received < 0) {
         perror("Erreur de réception de données");
-        return "";
+        return ""; // Retourne une chaîne vide en cas d'erreur
     }
     buffer[bytes_received] = '\0'; // Ajoute un terminateur de chaîne
-    return std::string(buffer);
+    return std::string(buffer); // Retourne la chaîne reçue
 }
 
 void DataSocket::closeSocket() {
     if (client_fd >= 0) {
-        close(client_fd);
+        close(client_fd); // Ferme le socket client
     }
 }
 
@@ -39,5 +40,5 @@ bool DataSocket::isReadyToRead() {
 }
 
 int DataSocket::getSocket() const {
-    return client_fd;
+    return client_fd; // Retourne le descripteur du socket
 }

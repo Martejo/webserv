@@ -18,12 +18,14 @@ ServerConfig::ServerConfig()
     : host(""), port(80), maxBodySize(1024 * 1024), defaultErrorPage("404.html") { // Valeurs par défaut
 }
 
-void ServerConfig::parseConfig(const std::string& configLine) {
-    std::istringstream stream(configLine);
+void ServerConfig::parseConfig(const std::string& configBlock) {
+    std::istringstream stream(configBlock);
     std::string key, value;
 
     // Lecture des paires clé-valeur
     while (stream >> key >> value) {
+        // std::cout << "All block :" << configBlock << std::endl; //test
+        std::cout << "Key :" << key << " Value :" << value << std::endl;//test 
         if (key == "host") {
             host = value;
         } else if (key == "port") {

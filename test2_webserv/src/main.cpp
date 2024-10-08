@@ -3,12 +3,17 @@
 
 int main(int argc, char* argv[]) {
     // Vérification des arguments
-    if (argc < 2) {
+    std::string configFile;
+    if (argc == 1) {
+        configFile = "./config/default.conf";
+    }
+    else if (argc == 2) {
+        configFile = argv[1];
+    }
+    else {
         std::cerr << "Usage: " << argv[0] << " <config_file>" << std::endl;
         return 1;
     }
-
-    std::string configFile = argv[1];
 
     try {
         // Créer une instance de WebServer

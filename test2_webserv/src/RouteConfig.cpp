@@ -4,9 +4,9 @@
 RouteConfig::RouteConfig() 
     : redirectUrl(""), 
       filePath(""), 
-      defaultFile("index.html"), // Fichier par défaut
-      enableDirectoryListing(false) { // Valeur par défaut
-}
+      enableDirectoryListing(false), // Valeur par défaut
+      defaultFile("index.html") // Fichier par défaut
+{}
 
 // Définit les méthodes autorisées
 void RouteConfig::setAllowedMethods(const std::vector<std::string>& methods) {

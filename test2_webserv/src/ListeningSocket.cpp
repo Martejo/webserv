@@ -1,8 +1,9 @@
 #include "ListeningSocket.hpp"
-#include "ServerConfig.hpp"
 #include <iostream>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <stdexcept> // Pour std::runtime_error
+#include <cstdio>    // Pour perror
 
 ListeningSocket::ListeningSocket(const ServerConfig& config) 
     : linkedServer(config) {
@@ -16,7 +17,7 @@ ListeningSocket::ListeningSocket(const ServerConfig& config)
     // Configuration de l'adresse
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY; // Accepte les connexions sur toutes les interfaces
-    address.sin_port = htons(config.port); // Convertit le port en format réseau
+    address.sin_port = htons(config.getPort()); // Convertit le port en format réseau
 
     // Liaison du socket à l'adresse
     if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
@@ -59,5 +60,9 @@ int ListeningSocket::getSocket() const {
 }
 
 int ListeningSocket::getPort() const {
-    return ntohs(address.sin_port);
+    return ntohs(address.sin_port); // Retourne le port
+}
+
+const ServerConfig ListeningSocket::getLinkedServer() const {
+    return linkedServer;
 }
