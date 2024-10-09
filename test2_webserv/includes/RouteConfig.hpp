@@ -27,3 +27,14 @@ public:
 };
 
 #endif // ROUTECONFIG_HPP
+
+
+std::string path_;
+    std::vector<std::string> allowedMethods_;
+    std::string redirection_;
+    std::string root_;
+    bool autoIndex_;
+    std::string index_;
+    std::string cgiExtension_;
+    bool uploadEnable_;
+    std::string uploadStore_;
