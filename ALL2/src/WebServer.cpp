@@ -6,10 +6,11 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
-#include <arpa/inet.h>
+#include <arpa/inet.h> // Pour htons, htonl
 #include <poll.h>
-#include <unistd.h>
+#include <unistd.h>    // Pour close()
 
+// Constructeur par défaut : initialisation si nécessaire
 WebServer::WebServer() : config_(NULL) {}
 
 WebServer::~WebServer()
@@ -22,12 +23,14 @@ WebServer::~WebServer()
     }
 }
 
+// Charge les configurations à partir du fichier
 void WebServer::loadConfiguration(const std::string& configFile) 
 {
     try
     {
         ConfigParser parser(configFile);
         config_ = parser.parse();
+        // config_->displayConfig();//test
     }
     catch (const ParsingException &e)
     {
@@ -35,28 +38,19 @@ void WebServer::loadConfiguration(const std::string& configFile)
     }
 }
 
+// Démarre le serveur
 void WebServer::start() {
-    const std::vector<Server*>& servers = config_->getServers();
-    for (size_t i = 0; i < servers.size(); ++i) {
-        Server* server = servers[i];
-        uint32_t host = server->getHost();
-        uint16_t port = server->getPort();
-        std::pair<uint32_t, uint16_t> key(host, port);
-
-        // Vérifier si un ListeningSocket existe déjà pour ce IP:Port
-        if (listeningSocketsMap_.find(key) == listeningSocketsMap_.end()) {
-            // Créer un nouveau ListeningSocket
-            ListeningSocket* newSocket = new ListeningSocket(host, port);
-            listeningSocketsMap_[key] = newSocket;
-            listeningHandler_.addListeningSocket(newSocket);
-        }
-        // Ajouter le serveur au ListeningSocket
-        listeningSocketsMap_[key]->addServer(server);
+    if (config_ == NULL) {
+        throw std::runtime_error("Configuration non chargée.");
     }
+
+    const std::vector<Server*>& servers = config_->getServers();
+    listeningHandler_.initialize(servers);
     std::cout << "Serveur démarré avec " << servers.size() << " serveurs." << std::endl;
 }
 
 void WebServer::runEventLoop() {
+    std::cout << "WEBSERVER.cpp runEventLoop()   : debut de la loop" << std::endl;
     while (true) {
         std::vector<pollfd> pollfds;
 
@@ -102,10 +96,10 @@ void WebServer::runEventLoop() {
         }
 
         // Gérer les sockets de données
-        // const std::vector<DataSocket*>& dataSockets = dataHandler_.getClientSockets(); //deja defini plus haut
+        const std::vector<DataSocket*>& currentDataSockets = dataHandler_.getClientSockets();
         for (size_t dataIndex = 0; index < pollfds.size(); ++index, ++dataIndex) {
             if (pollfds[index].revents & POLLIN) {
-                DataSocket* dataSocket = dataSockets[dataIndex];
+                DataSocket* dataSocket = currentDataSockets[dataIndex];
                 if (!dataSocket->receiveData()) {
                     dataSocket->closeSocket();
                 } else if (dataSocket->isRequestComplete()) {
@@ -120,17 +114,11 @@ void WebServer::runEventLoop() {
     }
 }
 
+// Nettoie les ressources et ferme les sockets
 void WebServer::cleanUp() {
     // Ferme les sockets et nettoie les ressources
-    listeningHandler_.cleanUp(); // Assurez-vous d'avoir cette méthode dans ListeningSocketHandler
-    dataHandler_.cleanUp();       // Assurez-vous d'avoir cette méthode dans DataSocketHandler
-
-    // Supprimer les ListeningSockets de la map et libérer la mémoire
-    for (std::map<std::pair<uint32_t, uint16_t>, ListeningSocket*>::iterator it = listeningSocketsMap_.begin();
-         it != listeningSocketsMap_.end(); ++it) {
-        delete it->second;
-    }
-    listeningSocketsMap_.clear();
+    listeningHandler_.cleanUp();
+    dataHandler_.cleanUp();
 
     std::cout << "Serveur arrêté proprement." << std::endl;
 }

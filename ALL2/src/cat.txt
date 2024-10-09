@@ -245,7 +245,7 @@ void ConfigParser::parseServer()
         throw ParsingException("'{' attendu après 'server'");
     ++currentTokenIndex_;
 
-    Server* server = new Server(*config_);
+    Server server(*config_);
 
     while (currentTokenIndex_ < tokens_.size())
     {
@@ -257,14 +257,14 @@ void ConfigParser::parseServer()
         }
         else if (token == "listen")
         {
-            parseListen(*server);
+            parseListen(server);
         }
         else if (token == "server_name")
         {
             ++currentTokenIndex_;
             while (currentTokenIndex_ < tokens_.size() && tokens_[currentTokenIndex_] != ";")
             {
-                server->addServerName(tokens_[currentTokenIndex_]);
+                server.addServerName(tokens_[currentTokenIndex_]);
                 ++currentTokenIndex_;
             }
             if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != ";")
@@ -275,35 +275,35 @@ void ConfigParser::parseServer()
         {
             std::string rootValue;
             parseSimpleDirective("root", rootValue);
-            server->setRoot(rootValue);
+            server.setRoot(rootValue);
         }
         else if (token == "index")
         {
             std::string indexValue;
             parseSimpleDirective("index", indexValue);
-            server->setIndex(indexValue);
+            server.setIndex(indexValue);
         }
         else if (token == "error_page")
         {
-            parseErrorPage(*server);
+            parseErrorPage(server);
         }
         else if (token == "client_max_body_size")
         {
             size_t size;
             parseClientMaxBodySize(size);
-            server->setClientMaxBodySize(size);
+            server.setClientMaxBodySize(size);
         }
         else if (token == "location")
         {
-            parseLocation(*server);
+            parseLocation(server);
         }
         else
         {
             throw ParsingException("Directive inconnue dans le contexte 'server': " + token);
         }
     }
-    std::cout << "CONFIGPARSER parseServer :" << server->getHost()<<":" << server->getPort() << std::endl;//test
-    config_->addServer(server);
+    std::cout << "CONFIGPARSER parseServer :" << server.getHost()<<":" << server.getPort() << std::endl;//test
+    config_->addServer(&server);
 }
 
 // Méthode pour parser 'listen'
@@ -484,4 +484,149 @@ void ConfigParser::displayParsingResult()
     }
 
     config_->displayConfig();
+}
+#include "../includes/Config.hpp"
+#include <iostream>
+
+Config::Config()
+    : clientMaxBodySize_(0)
+{
+}
+
+Config::~Config()
+{
+    // Supprimer les objets Server alloués dynamiquement
+    for (size_t i = 0; i < servers_.size(); ++i)
+    {
+        delete servers_[i];
+    }
+    servers_.clear();
+}
+
+void Config::setClientMaxBodySize(size_t size)
+{
+    clientMaxBodySize_ = size;
+}
+
+size_t Config::getClientMaxBodySize() const
+{
+    return clientMaxBodySize_;
+}
+
+void Config::addErrorPage(int statusCode, const std::string &uri)
+{
+    errorPages_[statusCode] = uri;
+}
+
+const std::map<int, std::string> &Config::getErrorPages() const
+{
+    return errorPages_;
+}
+
+std::string Config::getErrorPage(int errorCode) const
+{
+    std::map<int, std::string>::const_iterator it = errorPages_.find(errorCode);
+    if (it != errorPages_.end())
+        return it->second;
+    else
+        return ""; // Ou une valeur par défaut si nécessaire
+}
+
+void Config::setRoot(const std::string &root)
+{
+    root_ = root;
+}
+
+const std::string &Config::getRoot() const
+{
+    return root_;
+}
+
+void Config::setIndex(const std::string &index)
+{
+    index_ = index;
+}
+
+const std::string &Config::getIndex() const
+{
+    return index_;
+}
+
+void Config::addServer(Server* server)
+{
+    servers_.push_back(server);
+}
+
+const std::vector<Server*>& Config::getServers() const
+{
+    return servers_;
+}
+
+// DEBUG
+void Config::displayConfig() const
+{
+    std::cout << "client_max_body_size global: " << this->getClientMaxBodySize() << std::endl;
+
+    // Affichage des pages d'erreur globales
+    const std::map<int, std::string> &globalErrorPages = this->getErrorPages();
+    for (std::map<int, std::string>::const_iterator it = globalErrorPages.begin(); it != globalErrorPages.end(); ++it)
+    {
+        std::cout << "error_page " << it->first << " : " << it->second << std::endl;
+    }
+
+    const std::vector<Server*>& servers = this->getServers();
+    for (size_t i = 0; i < servers.size(); ++i)
+    {
+        std::cout << "  Server [" << i << "] :" << std::endl;
+        const Server* server = servers[i];
+        server->displayServer();
+    }
+}
+#include "../includes/ListeningSocketHandler.hpp"
+#include <arpa/inet.h> // Pour htons, htonl
+#include <iostream>
+
+ListeningSocketHandler::ListeningSocketHandler() {
+}
+
+ListeningSocketHandler::~ListeningSocketHandler() {
+    cleanUp();
+}
+
+void ListeningSocketHandler::addListeningSocket(ListeningSocket* listeningSocket) {
+    listeningSockets_.push_back(listeningSocket);
+}
+
+const std::vector<ListeningSocket*>& ListeningSocketHandler::getListeningSockets() const {
+    return listeningSockets_;
+}
+
+void ListeningSocketHandler::cleanUp() {
+    for (size_t i = 0; i < listeningSockets_.size(); ++i) {
+        delete listeningSockets_[i];
+    }
+    listeningSockets_.clear();
+    listeningSocketsMap_.clear();
+}
+
+void ListeningSocketHandler::initialize(const std::vector<Server*>& servers) {
+    for (size_t i = 0; i < servers.size(); ++i) {
+        Server* server = servers[i];
+        uint32_t host = server->getHost();
+        uint16_t port = server->getPort();
+        std::pair<uint32_t, uint16_t> key(host, port);
+
+        // Vérifier si un ListeningSocket existe déjà pour ce IP:Port
+        if (listeningSocketsMap_.find(key) == listeningSocketsMap_.end()) {
+            // Créer un nouveau ListeningSocket
+            ListeningSocket* newSocket = new ListeningSocket(host, port);
+            listeningSocketsMap_[key] = newSocket;
+            addListeningSocket(newSocket);
+            std::cout << "ListeningSocket créé pour " << inet_ntoa(*(struct in_addr*)&host) 
+                      << ":" << ntohs(port) << std::endl;
+        }
+        // Ajouter le serveur au ListeningSocket existant
+        listeningSocketsMap_[key]->addServer(server);
+    }
+    std::cout << "Initialization des ListeningSockets terminée." << std::endl;
 }

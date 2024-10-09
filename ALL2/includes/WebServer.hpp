@@ -4,25 +4,25 @@
 #include <vector>
 #include <string>
 #include <map>
-#include <utility> // For std::pair
+#include <utility> // Pour std::pair
 #include "ListeningSocketHandler.hpp"
 #include "DataSocketHandler.hpp"
 #include "Config.hpp"
 
 class WebServer {
 private:
-    ListeningSocketHandler listeningHandler_; // Manages listening sockets
-    DataSocketHandler dataHandler_;           // Manages client data sockets
-    Config* config_;                          // Pointer to the configuration
-    std::map<std::pair<uint32_t, uint16_t>, ListeningSocket*> listeningSocketsMap_; // Maps IP:Port to ListeningSocket
+    ListeningSocketHandler listeningHandler_; // Gère les sockets d'écoute
+    DataSocketHandler dataHandler_;           // Gère les sockets de communication avec les clients
+    Config* config_;                          // Pointeur vers la configuration
 
 public:
-    WebServer(); // Default constructor
-    ~WebServer(); // Destructor to clean up resources
-    void loadConfiguration(const std::string& configFile); // Loads configurations from the file
-    void start(); // Starts the server
-    void runEventLoop(); // Main event loop
-    void cleanUp(); // Cleans up resources and closes sockets
+    WebServer(); // Constructeur par défaut
+    ~WebServer(); // Destructeur pour nettoyer les ressources
+
+    void loadConfiguration(const std::string& configFile); // Charge les configurations depuis le fichier
+    void start(); // Démarre le serveur
+    void runEventLoop(); // Boucle principale d'événements
+    void cleanUp(); // Nettoie les ressources et ferme les sockets
 };
 
 #endif // WEBSERVER_HPP

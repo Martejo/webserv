@@ -21,6 +21,12 @@ ListeningSocket::ListeningSocket(uint32_t host, uint16_t port) {
     address.sin_addr.s_addr = host;
     address.sin_port = port;
 
+    //debug bind 
+    char ipStr[INET_ADDRSTRLEN];//test
+    inet_ntop(AF_INET, &host, ipStr, INET_ADDRSTRLEN);//test 
+    std::cout << "  listen: " << ipStr << ":" << ntohs(port) << std::endl;//test
+    std::cout << "LISTENINGSOCKET.cpp Constructeur : "<< ipStr << ":"<< ntohs(port) << " hexa :" << host << ":" << port << std::endl;//test
+
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
         // Gérer l'erreur
         std::cerr << "Erreur lors du bind" << std::endl;
