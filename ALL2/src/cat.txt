@@ -1,490 +1,3 @@
-// ConfigParser.cpp
-#include "../includes/ConfigParser.hpp"
-#include "../includes/Server.hpp"
-#include "../includes/Location.hpp"
-#include <iostream> // Pour les messages d'erreur
-#include <fstream>
-#include <sstream>
-#include <cctype>
-#include <cstdlib>
-#include <arpa/inet.h> // Pour inet_pton
-
-// Constructeur
-ConfigParser::ConfigParser(const std::string &filePath)
-    : currentTokenIndex_(0), filePath_(filePath), config_(NULL)
-{
-}
-
-// Destructeur
-ConfigParser::~ConfigParser()
-{
-    // Ne pas supprimer config_ ici car il est renvoyé par parse()
-}
-
-// Méthode principale de parsing
-Config* ConfigParser::parse()
-{
-    // Lecture du contenu du fichier
-    std::ifstream file(filePath_.c_str());
-    if (!file.is_open())
-    {
-        throw ParsingException("Impossible d'ouvrir le fichier de configuration: " + filePath_);
-    }
-
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    file.close();
-
-    // Initialisation de config_
-    config_ = new Config();
-
-    // Tokenisation du contenu
-    tokenize(buffer.str());
-
-    // Analyse des tokens
-    parseTokens();
-
-    return config_;
-}
-
-// Méthode de tokenisation
-void ConfigParser::tokenize(const std::string &content)
-{
-    std::string token;
-    bool inQuotes = false;
-    for (size_t i = 0; i < content.length(); ++i)
-    {
-        char c = content[i];
-
-        if (c == '#')
-        {
-            // Ignorer les commentaires
-            while (i < content.length() && content[i] != '\n')
-                ++i;
-        }
-        else if (std::isspace(c) && !inQuotes)
-        {
-            if (!token.empty())
-            {
-                tokens_.push_back(token);
-                token.clear();
-            }
-        }
-        else if (c == '"' || c == '\'')
-        {
-            inQuotes = !inQuotes;
-            token += c;
-        }
-        else if ((c == '{' || c == '}' || c == ';') && !inQuotes)
-        {
-            if (!token.empty())
-            {
-                tokens_.push_back(token);
-                token.clear();
-            }
-            tokens_.push_back(std::string(1, c));
-        }
-        else
-        {
-            token += c;
-        }
-    }
-    if (!token.empty())
-    {
-        tokens_.push_back(token);
-    }
-}
-
-void ConfigParser::parseTokens()
-{
-    while (currentTokenIndex_ < tokens_.size())
-    {
-        std::string token = tokens_[currentTokenIndex_];
-        if (token == "server")
-        {
-            parseServer();
-        }
-        else
-        {
-            if (token == "client_max_body_size")
-            {
-                size_t size;
-                parseClientMaxBodySize(size);
-                config_->setClientMaxBodySize(size);
-            }
-            else if (token == "error_page")
-            {
-                parseErrorPage(*config_);
-            }
-            else
-            {
-                throw ParsingException("Directive inconnue dans le contexte global: " + token);
-            }
-        }
-    }
-}
-
-
-
-// Méthode pour vérifier si une chaîne est un nombre
-bool ConfigParser::isNumber(const std::string &s)
-{
-    for (size_t i = 0; i < s.length(); ++i)
-    {
-        if (!isdigit(s[i]))
-            return false;
-    }
-    return true;
-}
-
-// Méthode pour parser une directive simple avec un point-virgule
-void ConfigParser::parseSimpleDirective(const std::string &directiveName, std::string &value)
-{
-    ++currentTokenIndex_;
-    if (currentTokenIndex_ >= tokens_.size())
-        throw ParsingException("Valeur attendue après '" + directiveName + "'");
-    value = tokens_[currentTokenIndex_];
-    ++currentTokenIndex_;
-    if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != ";")
-        throw ParsingException("';' attendu après la valeur de '" + directiveName + "'");
-    ++currentTokenIndex_;
-}
-
-// Méthode pour parser 'client_max_body_size'
-void ConfigParser::parseClientMaxBodySize(size_t &size)
-{
-    ++currentTokenIndex_;
-    if (currentTokenIndex_ >= tokens_.size())
-        throw ParsingException("Valeur attendue après 'client_max_body_size'");
-    size = std::atoi(tokens_[currentTokenIndex_].c_str());
-    ++currentTokenIndex_;
-    if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != ";")
-        throw ParsingException("';' attendu après la valeur de 'client_max_body_size'");
-    ++currentTokenIndex_;
-}
-
-// Méthode pour parser 'error_page' pour Config
-void ConfigParser::parseErrorPage(Config &config)
-{
-    ++currentTokenIndex_;
-    if (currentTokenIndex_ >= tokens_.size())
-        throw ParsingException("Valeur attendue après 'error_page'");
-
-    // Collecter les codes d'état
-    std::vector<int> statusCodes;
-    while (currentTokenIndex_ < tokens_.size() && isNumber(tokens_[currentTokenIndex_]))
-    {
-        int code = std::atoi(tokens_[currentTokenIndex_].c_str());
-        statusCodes.push_back(code);
-        ++currentTokenIndex_;
-    }
-
-    if (statusCodes.empty())
-        throw ParsingException("Au moins un code d'état attendu après 'error_page'");
-
-    // Vérifier qu'il y a une URI après les codes d'état
-    if (currentTokenIndex_ >= tokens_.size())
-        throw ParsingException("URI attendu après les codes d'état dans 'error_page'");
-
-    std::string uri = tokens_[currentTokenIndex_];
-    ++currentTokenIndex_;
-
-    if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != ";")
-        throw ParsingException("';' attendu après l'URI de 'error_page'");
-    ++currentTokenIndex_;
-
-    // Ajouter les associations code d'état -> URI dans la configuration
-    for (size_t i = 0; i < statusCodes.size(); ++i)
-    {
-        config.addErrorPage(statusCodes[i], uri);
-    }
-}
-
-// Méthode pour parser 'error_page' pour Server
-void ConfigParser::parseErrorPage(Server &server)
-{
-    ++currentTokenIndex_;
-    if (currentTokenIndex_ >= tokens_.size())
-        throw ParsingException("Valeur attendue après 'error_page'");
-
-    // Collecter les codes d'état
-    std::vector<int> statusCodes;
-    while (currentTokenIndex_ < tokens_.size() && isNumber(tokens_[currentTokenIndex_]))
-    {
-        int code = std::atoi(tokens_[currentTokenIndex_].c_str());
-        statusCodes.push_back(code);
-        ++currentTokenIndex_;
-    }
-
-    if (statusCodes.empty())
-        throw ParsingException("Au moins un code d'état attendu après 'error_page'");
-
-    // Vérifier qu'il y a une URI après les codes d'état
-    if (currentTokenIndex_ >= tokens_.size())
-        throw ParsingException("URI attendu après les codes d'état dans 'error_page'");
-
-    std::string uri = tokens_[currentTokenIndex_];
-    ++currentTokenIndex_;
-
-    if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != ";")
-        throw ParsingException("';' attendu après l'URI de 'error_page'");
-    ++currentTokenIndex_;
-
-    // Ajouter les associations code d'état -> URI dans le serveur
-    for (size_t i = 0; i < statusCodes.size(); ++i)
-    {
-        server.addErrorPage(statusCodes[i], uri);
-    }
-}
-
-
-void ConfigParser::parseServer()
-{
-    ++currentTokenIndex_;
-    if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != "{")
-        throw ParsingException("'{' attendu après 'server'");
-    ++currentTokenIndex_;
-
-    Server server(*config_);
-
-    while (currentTokenIndex_ < tokens_.size())
-    {
-        std::string token = tokens_[currentTokenIndex_];
-        if (token == "}")
-        {
-            ++currentTokenIndex_;
-            break;
-        }
-        else if (token == "listen")
-        {
-            parseListen(server);
-        }
-        else if (token == "server_name")
-        {
-            ++currentTokenIndex_;
-            while (currentTokenIndex_ < tokens_.size() && tokens_[currentTokenIndex_] != ";")
-            {
-                server.addServerName(tokens_[currentTokenIndex_]);
-                ++currentTokenIndex_;
-            }
-            if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != ";")
-                throw ParsingException("';' attendu après les valeurs de 'server_name'");
-            ++currentTokenIndex_;
-        }
-        else if (token == "root")
-        {
-            std::string rootValue;
-            parseSimpleDirective("root", rootValue);
-            server.setRoot(rootValue);
-        }
-        else if (token == "index")
-        {
-            std::string indexValue;
-            parseSimpleDirective("index", indexValue);
-            server.setIndex(indexValue);
-        }
-        else if (token == "error_page")
-        {
-            parseErrorPage(server);
-        }
-        else if (token == "client_max_body_size")
-        {
-            size_t size;
-            parseClientMaxBodySize(size);
-            server.setClientMaxBodySize(size);
-        }
-        else if (token == "location")
-        {
-            parseLocation(server);
-        }
-        else
-        {
-            throw ParsingException("Directive inconnue dans le contexte 'server': " + token);
-        }
-    }
-    std::cout << "CONFIGPARSER parseServer :" << server.getHost()<<":" << server.getPort() << std::endl;//test
-    config_->addServer(&server);
-}
-
-// Méthode pour parser 'listen'
-void ConfigParser::parseListen(Server &server)
-{
-    ++currentTokenIndex_;
-    if (currentTokenIndex_ >= tokens_.size())
-        throw ParsingException("Valeur attendue après 'listen'");
-
-    std::string listenValue = tokens_[currentTokenIndex_];
-    ++currentTokenIndex_;
-    if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != ";")
-        throw ParsingException("';' attendu après la valeur de 'listen'");
-    ++currentTokenIndex_;
-
-    // Parsing de listenValue pour extraire l'adresse IP et le port
-    std::string ipPart = "0.0.0.0"; // Valeur par défaut
-    std::string portPart;
-
-    size_t colonPos = listenValue.find(':');
-    if (colonPos != std::string::npos)
-    {
-        ipPart = listenValue.substr(0, colonPos);
-        portPart = listenValue.substr(colonPos + 1);
-    }
-    else
-    {
-        portPart = listenValue;
-    }
-
-    // Conversion de l'adresse IP en uint32_t
-    struct in_addr addr;
-    if (inet_pton(AF_INET, ipPart.c_str(), &addr) != 1)
-    {
-        throw ParsingException("Adresse IP invalide dans 'listen': " + ipPart);
-    }
-
-    // Conversion du port en uint16_t
-    int port = std::atoi(portPart.c_str());
-    if (port <= 0 || port > 65535)
-    {
-        throw ParsingException("Numéro de port invalide dans 'listen': " + portPart);
-    }
-
-    server.setHost(addr.s_addr);                           // Déjà en ordre réseau
-    server.setPort(htons(static_cast<uint16_t>(port)));    // Conversion en ordre réseau
-    std::cout << "CONFIGPARSER.cpp parseListen : "<< ipPart << ":"<<portPart << " hexa :" << server.getHost()<< ":" << server.getPort() << std::endl;//test
-}
-
-// Méthode pour parser une location
-void ConfigParser::parseLocation(Server &server)
-{
-    ++currentTokenIndex_;
-    if (currentTokenIndex_ >= tokens_.size())
-        throw ParsingException("Chemin attendu après 'location'");
-
-    std::string path = tokens_[currentTokenIndex_];
-    ++currentTokenIndex_;
-
-    if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != "{")
-        throw ParsingException("'{' attendu après le chemin de 'location'");
-    ++currentTokenIndex_;
-
-    Location location(server, path);
-
-    while (currentTokenIndex_ < tokens_.size())
-    {
-        std::string token = tokens_[currentTokenIndex_];
-        if (token == "}")
-        {
-            ++currentTokenIndex_;
-            break;
-        }
-        else if (token == "root")
-        {
-            std::string rootValue;
-            parseSimpleDirective("root", rootValue);
-            location.setRoot(rootValue);
-        }
-        else if (token == "index")
-        {
-            std::string indexValue;
-            parseSimpleDirective("index", indexValue);
-            location.setIndex(indexValue);
-        }
-        else if (token == "autoindex")
-        {
-            ++currentTokenIndex_;
-            if (currentTokenIndex_ >= tokens_.size())
-                throw ParsingException("'on' ou 'off' attendu après 'autoindex'");
-            if (tokens_[currentTokenIndex_] == "on")
-                location.setAutoIndex(true);
-            else if (tokens_[currentTokenIndex_] == "off")
-                location.setAutoIndex(false);
-            else
-                throw ParsingException("Valeur invalide pour 'autoindex': " + tokens_[currentTokenIndex_]);
-            ++currentTokenIndex_;
-            if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != ";")
-                throw ParsingException("';' attendu après la valeur de 'autoindex'");
-            ++currentTokenIndex_;
-        }
-        else if (token == "limit_except")
-        {
-            ++currentTokenIndex_;
-            std::vector<std::string> methods;
-            while (currentTokenIndex_ < tokens_.size() && tokens_[currentTokenIndex_] != "{")
-            {
-                methods.push_back(tokens_[currentTokenIndex_]);
-                ++currentTokenIndex_;
-            }
-            location.setAllowedMethods(methods);
-
-            if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != "{")
-                throw ParsingException("'{' attendu après les méthodes de 'limit_except'");
-
-            // Ignorer le contenu du bloc 'limit_except' pour simplifier
-            ++currentTokenIndex_;
-            int braceCount = 1;
-            while (currentTokenIndex_ < tokens_.size() && braceCount > 0)
-            {
-                if (tokens_[currentTokenIndex_] == "{")
-                    ++braceCount;
-                else if (tokens_[currentTokenIndex_] == "}")
-                    --braceCount;
-                ++currentTokenIndex_;
-            }
-        }
-        else if (token == "return")
-        {
-            std::string returnValue;
-            parseSimpleDirective("return", returnValue);
-            location.setRedirection(returnValue);
-        }
-        else if (token == "cgi_pass")
-        {
-            std::string cgiValue;
-            parseSimpleDirective("cgi_pass", cgiValue);
-            location.setCgiExtension(cgiValue);
-        }
-        else if (token == "upload_enable")
-        {
-            ++currentTokenIndex_;
-            if (currentTokenIndex_ >= tokens_.size())
-                throw ParsingException("'on' ou 'off' attendu après 'upload_enable'");
-            if (tokens_[currentTokenIndex_] == "on")
-                location.setUploadEnable(true);
-            else if (tokens_[currentTokenIndex_] == "off")
-                location.setUploadEnable(false);
-            else
-                throw ParsingException("Valeur invalide pour 'upload_enable': " + tokens_[currentTokenIndex_]);
-            ++currentTokenIndex_;
-            if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != ";")
-                throw ParsingException("';' attendu après la valeur de 'upload_enable'");
-            ++currentTokenIndex_;
-        }
-        else if (token == "upload_store")
-        {
-            std::string uploadStoreValue;
-            parseSimpleDirective("upload_store", uploadStoreValue);
-            location.setUploadStore(uploadStoreValue);
-        }
-        else
-        {
-            throw ParsingException("Directive inconnue dans le contexte 'location': " + token);
-        }
-    }
-
-    server.addLocation(location);
-}
-
-// Méthode pour afficher les résultats du parsing (Debug)
-void ConfigParser::displayParsingResult()
-{
-    if (config_ == NULL)
-    {
-        std::cerr << "Configuration non chargée." << std::endl;
-        return;
-    }
-
-    config_->displayConfig();
-}
 #include "../includes/Config.hpp"
 #include <iostream>
 
@@ -582,51 +95,536 @@ void Config::displayConfig() const
         server->displayServer();
     }
 }
-#include "../includes/ListeningSocketHandler.hpp"
-#include <arpa/inet.h> // Pour htons, htonl
+// Server.cpp
+#include "../includes/Server.hpp"
+#include "../includes/Location.hpp"
+#include <iostream>
+#include <arpa/inet.h> // Pour inet_ntop
+
+Server::Server(const Config &config)
+    : config_(config), clientMaxBodySizeIsSet_(false), rootIsSet_(false), indexIsSet_(false),
+      host_(INADDR_ANY), port_(htons(8080)) // Valeurs par défaut
+{
+}
+
+Server::~Server()
+{
+}
+
+void Server::addServerName(const std::string &serverName)
+{
+    serverNames_.push_back(serverName);
+}
+
+void Server::setRoot(const std::string &root)
+{
+    root_ = root;
+    rootIsSet_ = true;
+}
+
+void Server::setIndex(const std::string &index)
+{
+    index_ = index;
+    indexIsSet_ = true;
+}
+
+void Server::addErrorPage(int statusCode, const std::string &uri)
+{
+    errorPages_[statusCode] = uri;
+}
+
+void Server::setClientMaxBodySize(size_t size)
+{
+    clientMaxBodySize_ = size;
+    clientMaxBodySizeIsSet_ = true;
+}
+
+uint32_t Server::getHost() const
+{
+    return host_;
+}
+
+uint16_t Server::getPort() const
+{
+    return port_;
+}
+
+void Server::setHost(uint32_t host)
+{
+    host_ = host;
+}
+
+void Server::setPort(uint16_t port)
+{
+    port_ = port;
+}
+
+const std::vector<std::string> &Server::getServerNames() const
+{
+    return serverNames_;
+}
+
+const std::string &Server::getRoot() const
+{
+    if (rootIsSet_)
+        return root_;
+    else
+        return config_.getRoot();
+}
+
+const std::string &Server::getIndex() const
+{
+    if (indexIsSet_)
+        return index_;
+    else
+        return config_.getIndex();
+}
+
+const std::map<int, std::string> &Server::getErrorPages() const
+{
+    if (!errorPages_.empty())
+        return errorPages_;
+    else
+        return config_.getErrorPages();
+}
+
+std::string Server::getErrorPage(int errorCode) const
+{
+    std::map<int, std::string>::const_iterator it = errorPages_.find(errorCode);
+    if (it != errorPages_.end())
+        return it->second;
+    else
+        return config_.getErrorPage(errorCode);
+}
+
+size_t Server::getClientMaxBodySize() const
+{
+    if (clientMaxBodySizeIsSet_)
+        return clientMaxBodySize_;
+    else
+        return config_.getClientMaxBodySize();
+}
+
+void Server::addLocation(const Location &location)
+{
+    locations_.push_back(location);
+}
+
+const std::vector<Location> &Server::getLocations() const
+{
+    return locations_;
+}
+
+// DEBUG
+void Server::displayServer() const
+{
+    // Afficher l'adresse IP et le port
+    char ipStr[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &host_, ipStr, INET_ADDRSTRLEN);
+    std::cout << "  listen: " << ipStr << ":" << ntohs(port_) << std::endl;
+
+    // Affichage des server_name du serveur
+    const std::vector<std::string> &serverNames = this->getServerNames();
+    for (size_t j = 0; j < serverNames.size(); ++j)
+    {
+        std::cout << "  server_name: " << serverNames[j] << std::endl;
+    }
+
+    // Affichage des pages d'erreur du serveur
+    const std::map<int, std::string> &serverErrorPages = this->getErrorPages();
+    for (std::map<int, std::string>::const_iterator it = serverErrorPages.begin(); it != serverErrorPages.end(); ++it)
+    {
+        std::cout << "  error_page " << it->first << " : " << it->second << std::endl;
+    }
+
+    // Affichage du contenu des Locations du serveur
+    const std::vector<Location> &locations = this->getLocations();
+    for (size_t k = 0; k < locations.size(); ++k)
+    {
+        const Location &location = locations[k];
+        location.displayLocation();
+    }
+}
+#include "../includes/Location.hpp"
+#include "../includes/Server.hpp"
 #include <iostream>
 
-ListeningSocketHandler::ListeningSocketHandler() {
+Location::Location(const Server &server, const std::string &path)
+    : server_(server),                 // Initializes first (as declared)
+      clientMaxBodySizeIsSet_(false),  // Second
+      rootIsSet_(false),               // Third
+      indexIsSet_(false),              // Fourth
+      clientMaxBodySize_(0),           // Fifth (default value)
+      root_(""),                       // Sixth (default value)
+      index_(""),                      // Seventh (default value)
+      errorPages_(),                   // Eighth (default initialization)
+      path_(path),                     // Ninth
+      allowedMethods_(),               // Tenth (default initialization)
+      redirection_(""),                // Eleventh (default value)
+      autoIndex_(false),               // Twelfth
+      cgiExtension_(""),               // Thirteenth (default value)
+      uploadEnable_(false),            // Fourteenth
+      uploadStore_("")                 // Fifteenth (default value)
+{
 }
 
-ListeningSocketHandler::~ListeningSocketHandler() {
-    cleanUp();
+Location::~Location()
+{
 }
 
-void ListeningSocketHandler::addListeningSocket(ListeningSocket* listeningSocket) {
-    listeningSockets_.push_back(listeningSocket);
+void Location::setPath(const std::string &path)
+{
+    path_ = path;
 }
 
-const std::vector<ListeningSocket*>& ListeningSocketHandler::getListeningSockets() const {
-    return listeningSockets_;
+const std::string &Location::getPath() const
+{
+    return path_;
 }
 
-void ListeningSocketHandler::cleanUp() {
-    for (size_t i = 0; i < listeningSockets_.size(); ++i) {
-        delete listeningSockets_[i];
-    }
-    listeningSockets_.clear();
-    listeningSocketsMap_.clear();
+void Location::setAllowedMethods(const std::vector<std::string> &methods)
+{
+    allowedMethods_ = methods;
 }
 
-void ListeningSocketHandler::initialize(const std::vector<Server*>& servers) {
-    for (size_t i = 0; i < servers.size(); ++i) {
-        Server* server = servers[i];
-        uint32_t host = server->getHost();
-        uint16_t port = server->getPort();
-        std::pair<uint32_t, uint16_t> key(host, port);
+const std::vector<std::string> &Location::getAllowedMethods() const
+{
+    return allowedMethods_;
+}
 
-        // Vérifier si un ListeningSocket existe déjà pour ce IP:Port
-        if (listeningSocketsMap_.find(key) == listeningSocketsMap_.end()) {
-            // Créer un nouveau ListeningSocket
-            ListeningSocket* newSocket = new ListeningSocket(host, port);
-            listeningSocketsMap_[key] = newSocket;
-            addListeningSocket(newSocket);
-            std::cout << "ListeningSocket créé pour " << inet_ntoa(*(struct in_addr*)&host) 
-                      << ":" << ntohs(port) << std::endl;
+void Location::setRedirection(const std::string &redirection)
+{
+    redirection_ = redirection;
+}
+
+const std::string &Location::getRedirection() const
+{
+    return redirection_;
+}
+
+void Location::setRoot(const std::string &root)
+{
+    root_ = root;
+    rootIsSet_ = true;
+}
+
+const std::string &Location::getRoot() const
+{
+    if (rootIsSet_)
+        return root_;
+    else
+        return server_.getRoot();
+}
+
+void Location::setAutoIndex(bool autoIndex)
+{
+    autoIndex_ = autoIndex;
+}
+
+bool Location::getAutoIndex() const
+{
+    return autoIndex_;
+}
+
+void Location::setIndex(const std::string &index)
+{
+    index_ = index;
+    indexIsSet_ = true;
+}
+
+const std::string &Location::getIndex() const
+{
+    if (indexIsSet_)
+        return index_;
+    else
+        return server_.getIndex();
+}
+
+void Location::setCgiExtension(const std::string &extension)
+{
+    cgiExtension_ = extension;
+}
+
+const std::string &Location::getCgiExtension() const
+{
+    return cgiExtension_;
+}
+
+void Location::setUploadEnable(bool enable)
+{
+    uploadEnable_ = enable;
+}
+
+bool Location::getUploadEnable() const
+{
+    return uploadEnable_;
+}
+
+void Location::setUploadStore(const std::string &uploadStore)
+{
+    uploadStore_ = uploadStore;
+}
+
+const std::string &Location::getUploadStore() const
+{
+    return uploadStore_;
+}
+
+void Location::setClientMaxBodySize(size_t size)
+{
+    clientMaxBodySize_ = size;
+    clientMaxBodySizeIsSet_ = true;
+}
+
+size_t Location::getClientMaxBodySize() const
+{
+    if (clientMaxBodySizeIsSet_)
+        return clientMaxBodySize_;
+    else
+        return server_.getClientMaxBodySize();
+}
+
+void Location::addErrorPage(int statusCode, const std::string &uri)
+{
+    errorPages_[statusCode] = uri;
+}
+
+const std::map<int, std::string> &Location::getErrorPages() const
+{
+    if (!errorPages_.empty())
+        return errorPages_;
+    else
+        return server_.getErrorPages();
+}
+
+std::string Location::getErrorPage(int errorCode) const
+{
+    std::map<int, std::string>::const_iterator it = errorPages_.find(errorCode);
+    if (it != errorPages_.end())
+        return it->second;
+    else
+        return server_.getErrorPage(errorCode);
+}
+
+// DEBUG
+void Location::displayLocation() const
+{
+    std::cout << "  Location " << this->getPath() << ":" << std::endl;
+    std::cout << "    root: " << this->getRoot() << std::endl;
+    std::cout << "    index: " << this->getIndex() << std::endl;
+    std::cout << "    autoindex: " << (this->getAutoIndex() ? "on" : "off") << std::endl;
+
+    // Afficher les méthodes autorisées
+    const std::vector<std::string> &methods = this->getAllowedMethods();
+    if (!methods.empty())
+    {
+        std::cout << "    allowed_methods:";
+        for (size_t m = 0; m < methods.size(); ++m)
+        {
+            std::cout << " " << methods[m];
         }
-        // Ajouter le serveur au ListeningSocket existant
-        listeningSocketsMap_[key]->addServer(server);
+        std::cout << std::endl;
     }
-    std::cout << "Initialization des ListeningSockets terminée." << std::endl;
+
+    // Afficher d'autres informations si nécessaire
+    if (!this->getRedirection().empty())
+    {
+        std::cout << "    redirection: " << this->getRedirection() << std::endl;
+    }
+
+    if (!this->getCgiExtension().empty())
+    {
+        std::cout << "    cgi_pass: " << this->getCgiExtension() << std::endl;
+    }
+
+    std::cout << "    upload_enable: " << (this->getUploadEnable() ? "on" : "off") << std::endl;
+
+    if (!this->getUploadStore().empty())
+    {
+        std::cout << "    upload_store: " << this->getUploadStore() << std::endl;
+    }
+
+    std::cout << "    client_max_body_size: " << this->getClientMaxBodySize() << std::endl;
+
+    // Affichage des pages d'erreur de la location
+    const std::map<int, std::string> &locationErrorPages = this->getErrorPages();
+    for (std::map<int, std::string>::const_iterator it = locationErrorPages.begin(); it != locationErrorPages.end(); ++it)
+    {
+        std::cout << "    error_page " << it->first << " : " << it->second << std::endl;
+    }
+}
+#include "../includes/DataSocket.hpp"
+#include "../includes/HttpRequest.hpp"
+#include "../includes/HttpResponse.hpp"
+#include <unistd.h>
+#include <cstring>
+#include <iostream>
+#include <algorithm>
+
+DataSocket::DataSocket(int fd, const std::vector<Server*>& servers)
+    : client_fd(fd), associatedServers(servers), selectedServer(NULL), requestParsed(false)
+{
+}
+
+DataSocket::~DataSocket() {
+    closeSocket();
+}
+
+bool DataSocket::receiveData() {
+    std::cout << "DataSocket::receiveData() called." << std::endl;
+    
+    char buffer[4096];
+    ssize_t bytesRead = recv(client_fd, buffer, sizeof(buffer), 0);
+    if (bytesRead > 0) {
+        std::string data(buffer, bytesRead);
+        httpRequest.appendData(data);
+        std::cout << "Received " << bytesRead << " bytes." << std::endl;
+        
+        // Tente de parser la requête après avoir reçu de nouvelles données
+        if (httpRequest.parseRequest()) {
+            requestParsed = true;
+            return true;
+        }
+        return true; // Les données ont été reçues, mais la requête n'est peut-être pas encore complète
+    } else if (bytesRead == 0) {
+        // Le client a fermé la connexion
+        std::cout << "Client closed the connection." << std::endl;
+        return false;
+    } else {
+        // Gérer l'erreur
+        std::cerr << "Error receiving data." << std::endl;
+        return false;
+    }
+}
+
+void DataSocket::closeSocket() {
+    if (client_fd != -1) {
+        close(client_fd);
+        client_fd = -1;
+        std::cout << "Socket closed." << std::endl;
+    }
+}
+
+int DataSocket::getSocket() const {
+    return client_fd;
+}
+
+bool DataSocket::isRequestComplete() const {
+    return requestParsed && httpRequest.isComplete();
+}
+
+void DataSocket::processRequest() {
+    std::cout << "DataSocket::processRequest() called." << std::endl;
+    
+    // La requête a déjà été parsée dans receiveData()
+    // Récupérez l'en-tête Host
+    std::string hostHeader = httpRequest.getHeader("Host");
+    std::cout << "DataSocket::processRequest() Hostheader :" <<hostHeader  << std::endl;
+    // std::cout << "associated servers size" << associatedServers.size()<< associatedServers[0]->getServerNames()[0]<< std::endl;//test
+
+    // Sélectionnez le serveur approprié
+    for (size_t i = 0; i < associatedServers.size(); ++i) {
+        Server* server = associatedServers[i];
+        const std::vector<std::string>& serverNames = server->getServerNames();
+        if (std::find(serverNames.begin(), serverNames.end(), hostHeader) != serverNames.end()) {
+            selectedServer = server;
+            std::cout << "Selected server based on Host header." << std::endl;
+            break;
+        }
+    }
+
+    // Si aucun serveur n'a été trouvé, utilisez le premier par défaut (valider ce process avec le sujet)
+    if (!selectedServer && !associatedServers.empty()) {
+        selectedServer = associatedServers[0];
+        std::cout << "No matching server found. Using the default server." << std::endl;
+    }
+
+    if (!selectedServer) {
+        // Aucun serveur ne correspond, renvoyez une erreur 500
+        httpResponse.setStatusCode(500);
+        httpResponse.setBody("Internal Server Error: No matching server configuration.");
+    } else {
+        // Traitez la requête en utilisant selectedServer
+        // Exemple simplifié : renvoyer "Hello World!" pour toutes les requêtes
+        // Vous devrez implémenter la logique basée sur la configuration ici
+        httpResponse.setStatusCode(200);
+        httpResponse.setBody("Hello World!");
+    }
+
+    // Envoyez la réponse
+    std::string responseStr = httpResponse.generateResponse();
+    ssize_t bytesSent = send(client_fd, responseStr.c_str(), responseStr.size(), 0);
+    if (bytesSent < 0) {
+        std::cerr << "Error sending response." << std::endl;
+    } else {
+        std::cout << "Sent " << bytesSent << " bytes." << std::endl;
+    }
+}
+
+Server* DataSocket::getSelectedServer() const {
+    return selectedServer;
+}
+#include "../includes/HttpResponse.hpp"
+#include <sstream>
+#include <iostream>
+
+HttpResponse::HttpResponse()
+    : statusCode(200), reasonPhrase("OK"), body("") {
+    headers["Content-Type"] = "text/html";
+}
+
+void HttpResponse::setStatusCode(int code) {
+    statusCode = code;
+    reasonPhrase = getDefaultReasonPhrase(code);
+}
+
+void HttpResponse::setReasonPhrase(const std::string& phrase) {
+    reasonPhrase = phrase;
+}
+
+void HttpResponse::setBody(const std::string& bodyContent) {
+    body = bodyContent;
+    // Update Content-Length header
+    std::ostringstream oss;
+    oss << body.size();
+    headers["Content-Length"] = oss.str();
+}
+
+void HttpResponse::setHeader(const std::string& headerName, const std::string& headerValue) {
+    headers[headerName] = headerValue;
+}
+
+std::string HttpResponse::generateResponse() const {
+    std::cout << "HTTPRESPONSE.CPP generateResponse()"<< std::endl;
+    std::ostringstream response;
+
+    // Status line
+    response << "HTTP/1.1 " << statusCode << " " << reasonPhrase << "\r\n";
+
+    // Headers
+    for (std::map<std::string, std::string>::const_iterator it = headers.begin(); it != headers.end(); ++it) {
+        response << it->first << ": " << it->second << "\r\n";
+    }
+
+    response << "\r\n"; // Empty line to separate headers from body
+
+    // Body
+    response << body;
+
+    return response.str();
+}
+
+std::string HttpResponse::getDefaultReasonPhrase(int code) const {
+    switch (code) {
+        case 200: return "OK";
+        case 201: return "Created";
+        case 204: return "No Content";
+        case 301: return "Moved Permanently";
+        case 302: return "Found";
+        case 400: return "Bad Request";
+        case 403: return "Forbidden";
+        case 404: return "Not Found";
+        case 500: return "Internal Server Error";
+        default:  return "OK";
+    }
 }

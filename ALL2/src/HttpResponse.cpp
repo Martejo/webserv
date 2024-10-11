@@ -1,5 +1,6 @@
 #include "../includes/HttpResponse.hpp"
 #include <sstream>
+#include <iostream>
 
 HttpResponse::HttpResponse()
     : statusCode(200), reasonPhrase("OK"), body("") {
@@ -28,6 +29,7 @@ void HttpResponse::setHeader(const std::string& headerName, const std::string& h
 }
 
 std::string HttpResponse::generateResponse() const {
+    std::cout << "HTTPRESPONSE.CPP generateResponse()"<< std::endl;
     std::ostringstream response;
 
     // Status line

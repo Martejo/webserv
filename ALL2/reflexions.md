@@ -1,2 +1,0 @@
-on dirait qu' il y a un probleme quand on ajoute plusieurs serveurs les addresses ip que ListenSocketHandler tente de bind ne correspondent pas aux ip qui avaient ete ajoutes aux serveurs dans ConfigParser::parseServer() et ajoutes au std::vector<Servers*> servers_ avec Config::addServer();
-Est ce le std::vector<Servers*> qui pose probleme ou l' erreur vient elle d' ailleurs ()

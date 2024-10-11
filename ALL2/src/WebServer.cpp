@@ -50,7 +50,7 @@ void WebServer::start() {
 }
 
 void WebServer::runEventLoop() {
-    std::cout << "WEBSERVER.cpp runEventLoop()   : debut de la loop" << std::endl;
+    std::cout << "WebServer::runEventLoop() : Début de la boucle d'événements." << std::endl;
     while (true) {
         std::vector<pollfd> pollfds;
 
@@ -62,6 +62,7 @@ void WebServer::runEventLoop() {
             pfd.events = POLLIN;
             pfd.revents = 0;
             pollfds.push_back(pfd);
+            std::cout << "Ajout de ListeningSocket fd " << pfd.fd << " à pollfd." << std::endl;
         }
 
         // Ajouter les pollfd pour les sockets de données
@@ -72,7 +73,10 @@ void WebServer::runEventLoop() {
             pfd.events = POLLIN;
             pfd.revents = 0;
             pollfds.push_back(pfd);
+            std::cout << "Ajout de DataSocket fd " << pfd.fd << " à pollfd." << std::endl;
         }
+
+        std::cout << "Nombre total de pollfds : " << pollfds.size() << std::endl;
 
         int ret = poll(&pollfds[0], pollfds.size(), -1);
         if (ret < 0) {
@@ -80,6 +84,8 @@ void WebServer::runEventLoop() {
             perror("poll");
             break;
         }
+
+        std::cout << "poll() terminé avec succès." << std::endl;
 
         size_t index = 0;
         // Gérer les sockets d'écoute
@@ -89,20 +95,22 @@ void WebServer::runEventLoop() {
                 int new_fd = listeningSocket->acceptConnection();
                 if (new_fd >= 0) {
                     // Créer un DataSocket
-                    DataSocket* newDataSocket = new DataSocket(new_fd, listeningSocket->getAssociatedServers());
+                    DataSocket* newDataSocket = new DataSocket(new_fd, listeningSocket->getAssociatedServers(), *config_);
                     dataHandler_.addClientSocket(newDataSocket);
+                    std::cout << "Nouvelle connexion acceptée sur fd " << new_fd << "." << std::endl;
                 }
             }
         }
 
         // Gérer les sockets de données
-        const std::vector<DataSocket*>& currentDataSockets = dataHandler_.getClientSockets();
         for (size_t dataIndex = 0; index < pollfds.size(); ++index, ++dataIndex) {
             if (pollfds[index].revents & POLLIN) {
-                DataSocket* dataSocket = currentDataSockets[dataIndex];
+                DataSocket* dataSocket = dataSockets[dataIndex];
                 if (!dataSocket->receiveData()) {
+                    std::cout << "Fermeture de la connexion fd " << dataSocket->getSocket() << "." << std::endl;
                     dataSocket->closeSocket();
                 } else if (dataSocket->isRequestComplete()) {
+                    std::cout << "Requête complète reçue sur fd " << dataSocket->getSocket() << "." << std::endl;
                     dataSocket->processRequest();
                     dataSocket->closeSocket();
                 }

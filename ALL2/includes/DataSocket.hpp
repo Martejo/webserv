@@ -1,30 +1,45 @@
+// DataSocket.hpp
 #ifndef DATASOCKET_HPP
 #define DATASOCKET_HPP
 
-#include <string>
-#include <vector>
-#include "Server.hpp"
 #include "HttpRequest.hpp"
 #include "HttpResponse.hpp"
+#include "Config.hpp"
+#include <vector>
+
+class Server;
 
 class DataSocket {
-private:
-    int client_fd;                           // Client socket descriptor
-    std::vector<Server*> associatedServers;  // Associated servers
-    Server* selectedServer;                  // Selected server after parsing
-    HttpRequest httpRequest;                 // HTTP request object
-    HttpResponse httpResponse;               // HTTP response object
-
 public:
-    DataSocket(int fd, const std::vector<Server*>& servers);
+    DataSocket(int fd, const std::vector<Server*>& servers, const Config& config);
     ~DataSocket();
 
-    bool receiveData();                      // Receives data from the client
-    void closeSocket();                      // Closes the client socket
-    int getSocket() const;                   // Returns the socket descriptor
-    Server* getSelectedServer() const;       // Returns the selected server
-    bool isRequestComplete() const;          // Checks if the request is complete
-    void processRequest();                   // Processes the HTTP request
+    // Réception des données
+    bool receiveData();
+
+    // Vérifie si la requête est complète
+    bool isRequestComplete() const;
+
+    // Traite la requête et génère une réponse
+    void processRequest();
+
+    // Envoie la réponse au client
+    void sendResponse(const HttpResponse& response);
+
+    // Ferme la socket
+    void closeSocket();
+
+    // Obtient le descripteur de fichier
+    int getSocket() const;
+
+private:
+    int client_fd;
+    std::vector<Server*> associatedServers;
+    HttpRequest httpRequest;
+    HttpResponse httpResponse;
+    bool requestComplete;
+
+    const Config& config_;
 };
 
 #endif // DATASOCKET_HPP

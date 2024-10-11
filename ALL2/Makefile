@@ -7,6 +7,7 @@ CFLAGS		= -std=c++98 -g3 -Wall -Wextra -Werror -D_GLIBCXX_USE_CXX11_ABI=0
 SRC_FILES 	=	src/main.cpp \
 				src/HttpRequest.cpp \
 				src/HttpResponse.cpp \
+				src/RequestHandler.cpp \
 				src/Server.cpp \
 				src/Location.cpp \
 				src/WebServer.cpp \
@@ -24,6 +25,7 @@ OBJ			= $(SRC_FILES:.cpp=.o)
 
 INC 		=	includes/HttpRequest.hpp \
 				includes/HttpResponse.hpp \
+				includes/RequestHandler.hpp \
 				includes/Server.hpp \
 				includes/Location.hpp \
 				includes/WebServer.hpp \
@@ -34,6 +36,7 @@ INC 		=	includes/HttpRequest.hpp \
 				includes/Config.hpp \
 				includes/ConfigParser.hpp \
 				includes/Exceptions.hpp \
+				includes/Utils.hpp \
 				
 
 %.o   : %.cpp $(INC)
