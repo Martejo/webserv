@@ -38,11 +38,11 @@ void ListeningSocketHandler::initialize(const std::vector<Server*>& servers) {
             ListeningSocket* newSocket = new ListeningSocket(host, port);
             listeningSocketsMap_[key] = newSocket;
             addListeningSocket(newSocket);
-            std::cout << "ListeningSocket créé pour " << inet_ntoa(*(struct in_addr*)&host) 
-                      << ":" << ntohs(port) << std::endl;
+            // std::cout << "ListeningSocketHandler::initialize   : ListeningSocket créé pour " << inet_ntoa(*(struct in_addr*)&host) 
+            //           << ":" << ntohs(port) << std::endl;//test
         }
         // Ajouter le serveur au ListeningSocket existant
         listeningSocketsMap_[key]->addServer(server);
     }
-    std::cout << "Initialization des ListeningSockets terminée." << std::endl;
+    // std::cout << "ListeningSocketHandler::initialize   : Initialization des ListeningSockets terminée." << std::endl;
 }

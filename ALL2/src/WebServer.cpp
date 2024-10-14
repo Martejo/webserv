@@ -46,11 +46,11 @@ void WebServer::start() {
 
     const std::vector<Server*>& servers = config_->getServers();
     listeningHandler_.initialize(servers);
-    std::cout << "Serveur démarré avec " << servers.size() << " serveurs." << std::endl;
+    std::cout << "Serveur démarré avec " << servers.size() << " serveurs." << std::endl;//test
 }
 
 void WebServer::runEventLoop() {
-    std::cout << "WebServer::runEventLoop() : Début de la boucle d'événements." << std::endl;
+    std::cout << "WebServer::runEventLoop() : Début de la boucle d'événements." << std::endl;//test
     while (true) {
         std::vector<pollfd> pollfds;
 
@@ -62,7 +62,7 @@ void WebServer::runEventLoop() {
             pfd.events = POLLIN;
             pfd.revents = 0;
             pollfds.push_back(pfd);
-            std::cout << "Ajout de ListeningSocket fd " << pfd.fd << " à pollfd." << std::endl;
+            // std::cout << "WebServer::start   : Ajout de ListeningSocket fd " << pfd.fd << " à pollfd." << std::endl;//test
         }
 
         // Ajouter les pollfd pour les sockets de données
@@ -73,10 +73,10 @@ void WebServer::runEventLoop() {
             pfd.events = POLLIN;
             pfd.revents = 0;
             pollfds.push_back(pfd);
-            std::cout << "Ajout de DataSocket fd " << pfd.fd << " à pollfd." << std::endl;
+            // std::cout << "WebServer::runEventLoop   : Ajout de DataSocket fd " << pfd.fd << " à pollfd." << std::endl;//test
         }
 
-        std::cout << "Nombre total de pollfds : " << pollfds.size() << std::endl;
+        // std::cout << "WebServer::runEventLoop   : Nombre total de pollfds : " << pollfds.size() << std::endl; //test
 
         int ret = poll(&pollfds[0], pollfds.size(), -1);
         if (ret < 0) {
@@ -85,7 +85,7 @@ void WebServer::runEventLoop() {
             break;
         }
 
-        std::cout << "poll() terminé avec succès." << std::endl;
+        // std::cout << "WebServer::runEventLoop   : poll() terminé avec succès." << std::endl;//test
 
         size_t index = 0;
         // Gérer les sockets d'écoute
@@ -97,7 +97,7 @@ void WebServer::runEventLoop() {
                     // Créer un DataSocket
                     DataSocket* newDataSocket = new DataSocket(new_fd, listeningSocket->getAssociatedServers(), *config_);
                     dataHandler_.addClientSocket(newDataSocket);
-                    std::cout << "Nouvelle connexion acceptée sur fd " << new_fd << "." << std::endl;
+                    // std::cout << "WebServer::runEventLoop  : Nouvelle connexion acceptée sur fd " << new_fd << "." << std::endl; //test
                 }
             }
         }
@@ -107,10 +107,10 @@ void WebServer::runEventLoop() {
             if (pollfds[index].revents & POLLIN) {
                 DataSocket* dataSocket = dataSockets[dataIndex];
                 if (!dataSocket->receiveData()) {
-                    std::cout << "Fermeture de la connexion fd " << dataSocket->getSocket() << "." << std::endl;
+                    // std::cout << "WebServer::runEventLoop  : Fermeture de la connexion fd " << dataSocket->getSocket() << "." << std::endl;//test
                     dataSocket->closeSocket();
                 } else if (dataSocket->isRequestComplete()) {
-                    std::cout << "Requête complète reçue sur fd " << dataSocket->getSocket() << "." << std::endl;
+                    // std::cout << "WebServer::runEventLoop  : Requête complète reçue sur fd " << dataSocket->getSocket() << "." << std::endl;//test
                     dataSocket->processRequest();
                     dataSocket->closeSocket();
                 }
@@ -128,5 +128,5 @@ void WebServer::cleanUp() {
     listeningHandler_.cleanUp();
     dataHandler_.cleanUp();
 
-    std::cout << "Serveur arrêté proprement." << std::endl;
+    // std::cout << "WebServer::cleanUp  : Serveur arrêté proprement." << std::endl;//test
 }

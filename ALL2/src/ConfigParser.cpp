@@ -302,7 +302,7 @@ void ConfigParser::parseServer()
             throw ParsingException("Directive inconnue dans le contexte 'server': " + token);
         }
     }
-    std::cout << "CONFIGPARSER parseServer :" << server->getHost()<<":" << server->getPort() << std::endl;//test
+    // std::cout << "CONFIGPARSER parseServer :" << server->getHost()<<":" << server->getPort() << std::endl;//test
     config_->addServer(server);
 }
 
@@ -350,7 +350,7 @@ void ConfigParser::parseListen(Server &server)
 
     server.setHost(addr.s_addr);                           // Déjà en ordre réseau
     server.setPort(htons(static_cast<uint16_t>(port)));    // Conversion en ordre réseau
-    std::cout << "CONFIGPARSER.cpp parseListen : "<< ipPart << ":"<<portPart << " hexa :" << server.getHost()<< ":" << server.getPort() << std::endl;//test
+    // std::cout << "CONFIGPARSER.cpp parseListen : "<< ipPart << ":"<<portPart << " hexa :" << server.getHost()<< ":" << server.getPort() << std::endl;//test
 }
 
 // Méthode pour parser une location

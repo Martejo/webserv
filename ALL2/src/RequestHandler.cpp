@@ -10,8 +10,8 @@
 #include <limits.h>
 #include "../includes/Utils.hpp"
 
-RequestHandler::RequestHandler(const Config& config)
-    : config_(config)
+RequestHandler::RequestHandler(const Config& config, const std::vector<Server*>& associatedServers)
+    : config_(config), associatedServers_(associatedServers)
 {
 }
 
@@ -40,19 +40,22 @@ const Server* RequestHandler::selectServer(const HttpRequest& request) const {
     }
 
     // Parcourir tous les serveurs pour trouver une correspondance
-    const std::vector<Server*>& servers = config_.getServers();
-    for (size_t i = 0; i < servers.size(); ++i) {
-        const std::vector<std::string>& serverNames = servers[i]->getServerNames();
+    for (size_t i = 0; i < associatedServers_.size(); ++i) {
+        const std::vector<std::string>& serverNames = associatedServers_[i]->getServerNames();
         if (std::find(serverNames.begin(), serverNames.end(), hostHeader) != serverNames.end()) {
-            return servers[i];
+            std::cerr << "RequestHandler::selectServer   : Server finded by name => first name of server : " << associatedServers_[i]->getServerNames()[0] << " ip:port : "<< associatedServers_[i]->getHost() << ":"<< associatedServers_[i]->getPort() << std::endl; //test
+            return associatedServers_[i];
         }
     }
 
     // Si aucun serveur ne correspond, utiliser le premier serveur comme défaut
-    if (!servers.empty()) {
-        return servers[0];
+    if (!associatedServers_.empty()) {
+        std::cerr << "RequestHandler::selectServer   : Default server Used => first name of server : " << associatedServers_[0]->getServerNames()[0] << " ip:port : "<< associatedServers_[0]->getHost() << ":"<< associatedServers_[0]->getPort() << std::endl;//test
+        
+        return associatedServers_[0];
     }
-
+    
+    std::cerr << "RequestHandler::selectServer   : No server finded == PROBLEM because default must exist"<< std::endl;//test
     // Aucun serveur configuré
     return NULL;
 }

@@ -33,11 +33,11 @@ public:
     int getSocket() const;
 
 private:
-    int client_fd;
-    std::vector<Server*> associatedServers;
-    HttpRequest httpRequest;
-    HttpResponse httpResponse;
-    bool requestComplete;
+    int client_fd_;
+    std::vector<Server*> associatedServers_;
+    HttpRequest httpRequest_;
+    HttpResponse httpResponse_;
+    bool requestComplete_;
 
     const Config& config_;
 };

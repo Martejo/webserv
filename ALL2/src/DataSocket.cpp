@@ -1,37 +1,46 @@
 // DataSocket.cpp
-#include "DataSocket.hpp"
-#include "RequestHandler.hpp"
+#include "../includes/DataSocket.hpp"
+#include "../includes/RequestHandler.hpp"
+#include "../includes/Color_Macros.hpp"
 #include <unistd.h>
 #include <cstring>
 #include <iostream>
 #include <algorithm>
 
 DataSocket::DataSocket(int fd, const std::vector<Server*>& servers, const Config& config)
-    : client_fd(fd), associatedServers(servers), requestComplete(false), config_(config) {
+    : client_fd_(fd), associatedServers_(servers), requestComplete_(false), config_(config) {
 }
 
 DataSocket::~DataSocket() {
     closeSocket();
 }
-
+//add
+//partie du code que l' on peut mettre dans RequestHandler ?
 bool DataSocket::receiveData() {
-    std::cout << "DataSocket::receiveData() called." << std::endl;
+
 
     char buffer[4096];
-    ssize_t bytesRead = recv(client_fd, buffer, sizeof(buffer), 0);
+    ssize_t bytesRead = recv(client_fd_, buffer, sizeof(buffer), 0);
+    //add
+    //faire une boucle while ici pour gerer les requetes en plusieurs parties
+    
     if (bytesRead > 0) {
         std::string data(buffer, bytesRead);
+        std::cout << BLUE <<"\n\n\n\nREQUETE RECUE DataSocket::receiveData(): \n" << data << std::endl;//test
         std::cout << "Received " << bytesRead << " bytes." << std::endl;
-        httpRequest.appendData(data);
+        httpRequest_.appendData(data);
 
-        if (httpRequest.parseRequest()) {
-            requestComplete = httpRequest.isComplete();
-            if (requestComplete) {
-                std::cout << "Request is complete." << std::endl;
-            } else {
-                std::cout << "Request parsing is incomplete." << std::endl;
-            }
+        //add 
+        //gestion des requetes incompletes ? 
+        if (httpRequest_.parseRequest()) {
+            requestComplete_ = httpRequest_.isComplete();
+            // if (requestComplete_) {
+            //     std::cout << "Request is complete." << std::endl;
+            // } else {
+            //     std::cout << "Request parsing is incomplete." << std::endl;
+            // }
         }
+        std::cout <<"\nREQUETE COMPLETE\n" << RESET << std::endl;//test
         return true;
     } else if (bytesRead == 0) {
         // Le client a fermé la connexion
@@ -45,22 +54,17 @@ bool DataSocket::receiveData() {
 }
 
 bool DataSocket::isRequestComplete() const {
-    return requestComplete;
+    return requestComplete_;
 }
 
 void DataSocket::processRequest() {
-    std::cout << "DataSocket::processRequest() called." << std::endl;
-
-    if (!isRequestComplete()) {
-        std::cerr << "Request is not complete. Cannot process." << std::endl;
-        return;
-    }
+    // std::cout << "DataSocket::processRequest() called." << std::endl;//test
 
     // Créer une instance de RequestHandler
-    RequestHandler handler(config_);
+    RequestHandler handler(config_, associatedServers_);
 
     // Traiter la requête et obtenir la réponse
-    HttpResponse response = handler.handleRequest(httpRequest);
+    HttpResponse response = handler.handleRequest(httpRequest_);
 
     // Envoyer la réponse au client
     sendResponse(response);
@@ -72,22 +76,22 @@ void DataSocket::processRequest() {
 void DataSocket::sendResponse(const HttpResponse& response) {
     // Convertir la réponse en chaîne de caractères
     std::string responseStr = response.generateResponse();
-    ssize_t bytesSent = send(client_fd, responseStr.c_str(), responseStr.size(), 0);
+    ssize_t bytesSent = send(client_fd_, responseStr.c_str(), responseStr.size(), 0);
     if (bytesSent < 0) {
-        std::cerr << "Error sending response." << std::endl;
+        std::cerr << "DataSocket::sendResponse  : Error sending response." << std::endl;//test
     } else {
-        std::cout << "Sent " << bytesSent << " bytes." << std::endl;
+        std::cout << "DataSocket::sendResponse  : Sent " << bytesSent << " bytes." << std::endl;//test
     }
 }
 
 void DataSocket::closeSocket() {
-    if (client_fd != -1) {
-        close(client_fd);
-        client_fd = -1;
-        std::cout << "Socket closed." << std::endl;
+    if (client_fd_ != -1) {
+        close(client_fd_);
+        client_fd_ = -1;
+        std::cout << "DataSocket::sendResponse  : Socket closed." << std::endl;//test
     }
 }
 
 int DataSocket::getSocket() const {
-    return client_fd;
+    return client_fd_;
 }

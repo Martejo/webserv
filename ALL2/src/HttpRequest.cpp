@@ -1,5 +1,6 @@
 // HttpRequest.cpp
 #include "../includes/HttpRequest.hpp"
+#include "../includes/Color_Macros.hpp"
 #include <sstream>
 #include <algorithm>
 #include <cctype>
@@ -13,22 +14,21 @@ HttpRequest::~HttpRequest() {
 }
 
 void HttpRequest::appendData(const std::string& data) {
-    std::cout << "HTTPREQUEST.cpp appendData() : " << data << std::endl;
     rawData += data;
 }
 
 bool HttpRequest::isComplete() const {
     if (!headersParsed) {
-        std::cout << "HTTPREQUEST.cpp isComplete() headers are not parsed " << std::endl;
+        // std::cout << "HttpRequest::isComplete()  : headers are not parsed " << std::endl;//test
         return false;
     }
-    std::cout << "HTTPREQUEST.cpp isComplete() body size: " << body.size() << " / " << contentLength << std::endl;
+    // std::cout << "HttpRequest::isComplete()  : body size: " << body.size() << " / " << contentLength << std::endl;//test
 
     return body.size() >= contentLength;
 }
 
 bool HttpRequest::parseRequest() {
-    std::cout << "HTTPREQUEST.cpp parseRequest() called." << std::endl;
+    // std::cout << "HttpRequest::parseRequest" << std::endl; //test
 
     std::istringstream stream(rawData);
     std::string line;
@@ -36,7 +36,7 @@ bool HttpRequest::parseRequest() {
     while (state_ != COMPLETE && std::getline(stream, line)) {
         if (state_ == REQUEST_LINE) {
             if (line.empty()) {
-                std::cout << "Empty request line. Waiting for more data." << std::endl;
+                std::cout << "HttpRequest::parseRequest()  : Empty request line. Waiting for more data." << std::endl;//test
                 return false; // Attendre plus de données
             }
             parseRequestLine(line);
@@ -72,17 +72,17 @@ bool HttpRequest::parseRequest() {
                 if (body.size() >= contentLength) {
                     state_ = COMPLETE;
                 } else {
-                    std::cout << "Body not complete yet. Received " << body.size() << " bytes, expecting " << contentLength << " bytes." << std::endl;
+                    std::cout << "HttpRequest::parseRequest()  : Body not complete yet. Received " << body.size() << " bytes, expecting " << contentLength << " bytes." << std::endl; //test
                     return false; // Attendre plus de données
                 }
             }
             else {
-                std::cout << "End of headers not found while parsing body. Waiting for more data." << std::endl;
+                std::cout << "HttpRequest::parseRequest()  : End of headers not found while parsing body. Waiting for more data." << std::endl; //test
                 return false; // Attendre plus de données
             }
         }
     }
-
+    std::cout << "HttpRequest::parseRequest()  : request is complete"<< std::endl; //test
     return state_ == COMPLETE;
 }
 
@@ -95,7 +95,7 @@ void HttpRequest::parseRequestLine(const std::string& line) {
         httpVersion.erase(httpVersion.size() - 1);
     }
 
-    std::cout << "Parsed request line: " << method << " " << path << " " << httpVersion << std::endl;
+    // std::cout << "HttpRequest::parseRequestLine  : Parsed request line: " << method << " " << path << " " << httpVersion << std::endl;//test
 }
 
 void HttpRequest::parseHeaderLine(const std::string& line) {
@@ -107,11 +107,11 @@ void HttpRequest::parseHeaderLine(const std::string& line) {
         // Supprimer les espaces
         headerName.erase(headerName.find_last_not_of(" \t\r\n") + 1);
         headerValue.erase(0, headerValue.find_first_not_of(" \t\r\n"));
-        headerValue.erase(headerValue.find_last_not_of(" \t\r\n") + 1);//test
+        headerValue.erase(headerValue.find_last_not_of(" \t\r\n") + 1);
 
         headers[headerName] = headerValue;
 
-        std::cout << "Parsed header: " << headerName << " = '" << headerValue << "'"  << std::endl;
+        // std::cout << "HttpRequest::parseRequestLine  : Parsed header: " << headerName << " = '" << headerValue << "'"  << std::endl;//test
     }
 }
 

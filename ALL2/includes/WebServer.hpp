@@ -8,6 +8,7 @@
 #include "ListeningSocketHandler.hpp"
 #include "DataSocketHandler.hpp"
 #include "Config.hpp"
+#include "Color_Macros.hpp"
 
 class WebServer {
 private:

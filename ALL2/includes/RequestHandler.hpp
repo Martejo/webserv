@@ -11,14 +11,15 @@
 
 class RequestHandler {
 public:
-    RequestHandler(const Config& config);
+    RequestHandler(const Config& config, const std::vector<Server*>& associatedServers);
     ~RequestHandler();
 
     // Traite une requête HTTP et génère une réponse appropriée
     HttpResponse handleRequest(const HttpRequest& request);
 
 private:
-    const Config& config_;
+    const Config& config_; //config globale du projet
+    const std::vector<Server*>& associatedServers_; //serveurs associes au dataSocket qui a recu la requete
 
     // Sélectionne le serveur approprié basé sur l'en-tête Host
     const Server* selectServer(const HttpRequest& request) const;
