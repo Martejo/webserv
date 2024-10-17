@@ -133,6 +133,16 @@ HttpResponse RequestHandler::process(const Server* server, const Location* locat
     std::string requestPath = request.getPath();
     if (requestPath[requestPath.size() - 1] == '/')
         requestPath += index; // Ajouter le fichier index si le chemin se termine par '/'
+    
+    //retirer la location de requestPath
+    if (location)
+    {
+        std::string pathToRm = location.getPath();
+        size_t pos = requestPath.find(pathToRm);
+        if (pos != std::string::npos) {
+            requestPath.erase(pos, to_remove.length());
+        }
+    }
 
     std::string fullPath = root + requestPath;
 
