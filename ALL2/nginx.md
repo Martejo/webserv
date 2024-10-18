@@ -17,5 +17,6 @@ sudo cp -r   /var/www/SimpleWebsite  ~/Desktop/webserv/ALL2/nginxApp/
 sudo ln -s /etc/nginx/sites-available/simpleWebsite.conf /etc/nginx/sites-enabled/
 sudo nginx -t  # Vérifiez la syntaxe de la configuration
 sudo systemctl restart nginx  # Redémarrez Nginx
+sudo systemctl start nginx
 
 # ajouter mon site
