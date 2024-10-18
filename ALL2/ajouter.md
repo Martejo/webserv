@@ -8,3 +8,5 @@ upload des fichiers
 gestion des cgi avec cgi on
 
 code de retour avec return ? ou toujours redir permanente 301 (hardcoder)
+
+verifier si aucune root n' est mise sur le serveur si une exception se lance

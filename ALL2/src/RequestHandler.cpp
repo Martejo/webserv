@@ -74,7 +74,9 @@ const Location* RequestHandler::selectLocation(const Server* server, const HttpR
             longestMatch = locPath.length();
         }
     }
-
+    
+    // if(matchedLocation)
+    //     std::cout << matchedLocation->getPath() << std::endl;//test
     return matchedLocation;
 }
 
@@ -131,22 +133,24 @@ HttpResponse RequestHandler::process(const Server* server, const Location* locat
 
     // Construire le chemin complet du fichier demandé
     std::string requestPath = request.getPath();
+    // Ajouter le fichier index si le chemin se termine par '/'
     if (requestPath[requestPath.size() - 1] == '/')
-        requestPath += index; // Ajouter le fichier index si le chemin se termine par '/'
-    
-    //retirer la location de requestPath
-    if (location)
+        requestPath += index; 
+    //retirer la location de requestPath si la directive root est parametree en son sein 
+    if (location && location->getRootIsSet())
     {
-        std::string pathToRm = location.getPath();
-        size_t pos = requestPath.find(pathToRm);
+        std::string to_remove = location->getPath();
+        size_t pos = requestPath.find(to_remove);
         if (pos != std::string::npos) {
             requestPath.erase(pos, to_remove.length());
+            // std::cout << "Location path removed" << to_remove << std::endl;//test
+
         }
     }
 
     std::string fullPath = root + requestPath;
 
-    std::cout << "Serving file: " << fullPath << std::endl;
+    std::cout << "Serving file: " << fullPath << std::endl;//test
 
     // Vérifier la sécurité du chemin
     if (!isPathSecure(root, fullPath)) {
@@ -257,6 +261,8 @@ bool RequestHandler::isPathSecure(const std::string& root, const std::string& fu
 
     std::string realRootStr(realRoot);
     std::string realFullPathStr(realFullPath);
+
+    // std::cout << "REAL ROOT :" << realRootStr << " realFullPath :" << realFullPath <<std::endl; //test
 
     // Vérifier que fullPath commence par root
     if (realFullPathStr.find(realRootStr) != 0) {

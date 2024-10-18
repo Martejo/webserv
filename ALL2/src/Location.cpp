@@ -159,6 +159,12 @@ std::string Location::getErrorPage(int errorCode) const
         return server_.getErrorPage(errorCode);
 }
 
+bool Location::getRootIsSet() const
+{
+    return(rootIsSet_);
+}
+
+
 // DEBUG
 void Location::displayLocation() const
 {

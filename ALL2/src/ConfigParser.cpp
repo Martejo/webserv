@@ -474,6 +474,15 @@ void ConfigParser::parseLocation(Server &server)
     server.addLocation(location);
 }
 
+void ConfigParser::checkConfigValidity()
+{
+    //verifier si getRoot fonctionne pour tout les serveurs
+    
+    //verifier si getHost et getPort 
+
+}
+
+
 // Méthode pour afficher les résultats du parsing (Debug)
 void ConfigParser::displayParsingResult()
 {

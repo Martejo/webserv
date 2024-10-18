@@ -44,6 +44,8 @@ public:
     void setClientMaxBodySize(size_t size);
     size_t getClientMaxBodySize() const;
 
+    bool getRootIsSet() const;
+
     // Méthodes pour gérer les pages d'erreur
     void addErrorPage(int statusCode, const std::string &uri);
     const std::map<int, std::string> &getErrorPages() const;
