@@ -19,4 +19,7 @@ sudo nginx -t  # Vérifiez la syntaxe de la configuration
 sudo systemctl restart nginx  # Redémarrez Nginx
 sudo systemctl start nginx
 
-# ajouter mon site
+# lancer le docker sans dockercompose
+<!-- docker run --name my-nginx -p 8080:8080 -v $(pwd)/SimpleWebsite.conf:/etc/nginx/nginx.conf -v $(pwd)/SimpleWebsite:/usr/share/nginx/html:ro -d nginx -->
+docker build -t my-nginx-cgi .
+docker run --name my-nginx-cgi -p 8080:8080 -d my-nginx-cgi
