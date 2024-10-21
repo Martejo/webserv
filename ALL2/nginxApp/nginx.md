@@ -23,3 +23,11 @@ sudo systemctl start nginx
 <!-- docker run --name my-nginx -p 8080:8080 -v $(pwd)/SimpleWebsite.conf:/etc/nginx/nginx.conf -v $(pwd)/SimpleWebsite:/usr/share/nginx/html:ro -d nginx -->
 docker build -t my-nginx-cgi .
 docker run --name my-nginx-cgi -p 8080:8080 -d my-nginx-cgi
+
+# afficher les dockers en cours 
+docker ps 
+docker ps -a
+
+# stopper le docker et le supprimer 
+docker stop my-nginx-cgi
+docker rm my-nginx-cgi 

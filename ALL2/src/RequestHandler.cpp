@@ -5,6 +5,7 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <fstream>
+#include <regex>
 #include <sstream>
 #include <iostream>
 #include <limits.h>
@@ -115,11 +116,7 @@ HttpResponse RequestHandler::process(const Server* server, const Location* locat
 
     // Traiter les uploads si activés
     if (location && location->getUploadEnable()) {
-        // Implémenter la logique de gestion des uploads
-        // Pour l'instant, renvoyer une réponse 501 Not Implemented
-        response.setStatusCode(501); // Not Implemented
-        response.setBody("Upload functionality not implemented.");
-        return response;
+        return handleFileUpload(request, location);
     }
 
     // Déterminer le répertoire racine et le fichier index
@@ -200,6 +197,74 @@ HttpResponse RequestHandler::process(const Server* server, const Location* locat
         }
     }
 
+    return response;
+}
+
+HttpResponse RequestHandler::handleFileUpload(const HttpRequest& request, const Location* location) const {
+    HttpResponse response;
+
+    // Extraire la limite (boundary) de l'en-tête Content-Type
+    std::string contentType = request.getHeader("Content-Type");
+    std::string boundary;
+    std::smatch match;
+    std::regex boundaryRegex("boundary=(.*)");
+    if (std::regex_search(contentType, match, boundaryRegex)) {
+        boundary = "--" + match.str(1);
+    } else {
+        response.setStatusCode(400);
+        response.setBody("No boundary found in multipart request.");
+        return response;
+    }
+
+    // Lire le corps de la requête
+    std::string body = request.getBody();
+
+    // Séparer les différentes parties
+    std::string::size_type start = 0;
+    while ((start = body.find(boundary, start)) != std::string::npos) {
+        start += boundary.length();
+        std::string::size_type end = body.find(boundary, start);
+        if (end == std::string::npos) break;
+
+        std::string part = body.substr(start, end - start);
+
+        // Extraire les en-têtes de la partie
+        std::string::size_type headerEnd = part.find("\r\n\r\n");
+        if (headerEnd == std::string::npos) continue;
+
+        std::string headers = part.substr(0, headerEnd);
+        std::string fileData = part.substr(headerEnd + 4);
+
+        // Vérifier si cette partie est un fichier
+        if (headers.find("filename=") != std::string::npos) {
+            // Extraire le nom de fichier
+            std::regex filenameRegex("filename=\"([^\"]+)\"");
+            std::smatch filenameMatch;
+            if (std::regex_search(headers, filenameMatch, filenameRegex)) {
+                std::string filename = filenameMatch.str(1);
+                
+                // Construire le chemin complet pour sauvegarder le fichier
+                std::string uploadDirectory = location->getUploadStore();  // Obtenir le répertoire d'upload depuis la configuration
+                std::string fullPath = uploadDirectory + "/" + filename;
+
+                // Sauvegarder le fichier
+                std::ofstream file(fullPath.c_str(), std::ios::binary);
+                if (file.is_open()) {
+                    file.write(fileData.c_str(), fileData.size());
+                    file.close();
+                    std::cout << "File saved: " << fullPath << std::endl;
+                } else {
+                    std::cerr << "Failed to save file: " << fullPath << std::endl;
+                    response.setStatusCode(500);
+                    response.setBody("Failed to save file.");
+                    return response;
+                }
+            }
+        }
+    }
+
+    response.setStatusCode(200);
+    response.setBody("File upload successful.");
     return response;
 }
 

@@ -35,6 +35,7 @@ public:
     const std::map<int, std::string> &getErrorPages() const;
     size_t getClientMaxBodySize() const;
 
+
     // Nouvelle méthode pour obtenir une page d'erreur spécifique
     std::string getErrorPage(int errorCode) const;
 

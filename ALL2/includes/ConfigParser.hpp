@@ -32,7 +32,8 @@ private:
     void parseErrorPage(Config &config);
     void parseErrorPage(Server &server);
     void parseListen(Server &server); // New method to parse 'listen'
-
+    //check Methods
+    void checkConfigValidity() const ; 
     // Step 2: Validate the entire configuration (possibly in a checkConfig class)
 
     // Private members

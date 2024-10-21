@@ -39,6 +39,8 @@ private:
     // Vérifie la sécurité du chemin pour éviter les traversées de répertoires
     bool isPathSecure(const std::string& root, const std::string& fullPath) const;
 
+    // Gere les uploads de fichiers
+    HttpResponse handleFileUpload(const HttpRequest& request, const Location* location) const;
     // Gère les erreurs personnalisées
     HttpResponse handleError(int statusCode, const Server* server) const;
 };

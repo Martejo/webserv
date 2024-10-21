@@ -44,6 +44,9 @@ Config* ConfigParser::parse()
     // Analyse des tokens
     parseTokens();
 
+    // Valider la conformite de la configuration obtenue 
+    checkConfigValidity();
+
     return config_;
 }
 
@@ -474,12 +477,19 @@ void ConfigParser::parseLocation(Server &server)
     server.addLocation(location);
 }
 
-void ConfigParser::checkConfigValidity()
+void ConfigParser::checkConfigValidity() const
 {
+    if(!config_)
+        throw (ParsingException("An error occured while charging configuration file"));
     //verifier si getRoot fonctionne pour tout les serveurs
-    
-    //verifier si getHost et getPort 
-
+    const std::vector<Server*> servers = config_->getServers();
+    if(!servers[0])
+        throw (ParsingException("An error occured while charging configuration file : no server has been set"));
+    for(size_t i = 0; i < servers.size(); i++)
+    {
+        if(servers[i]->getRoot() == "")
+            throw (ParsingException("An error occured while charging configuration file :\n at least one server have no root directory"));
+    }
 }
 
 
