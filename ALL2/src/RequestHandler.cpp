@@ -5,11 +5,12 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <fstream>
-#include <regex>
 #include <sstream>
 #include <iostream>
 #include <limits.h>
 #include "../includes/Utils.hpp"
+#include "../includes/Color_Macros.hpp"
+
 
 RequestHandler::RequestHandler(const Config& config, const std::vector<Server*>& associatedServers)
     : config_(config), associatedServers_(associatedServers)
@@ -81,7 +82,8 @@ const Location* RequestHandler::selectLocation(const Server* server, const HttpR
     return matchedLocation;
 }
 
-HttpResponse RequestHandler::process(const Server* server, const Location* location, const HttpRequest& request) const {
+HttpResponse RequestHandler::process(const Server* server, const Location* location, const HttpRequest& request) const 
+{
     HttpResponse response;
 
     // Vérifier les méthodes HTTP autorisées
@@ -114,10 +116,27 @@ HttpResponse RequestHandler::process(const Server* server, const Location* locat
         return response;
     }
 
-    // Traiter les uploads si activés
-    if (location && location->getUploadEnable()) {
+    // Si la méthode est GET, simplement servir le fichier HTML
+    if (request.getMethod() == "GET") {
+        return serveStaticFile(server, location, request); // Fonction servant les fichiers statiques (comme upload.html)
+    }
+
+    // Traiter les uploads si la méthode est POST et si l'upload est activé
+    if (request.getMethod() == "POST" && location && location->getUploadEnable()) {
         return handleFileUpload(request, location);
     }
+
+    // if (location && location->isCgiEnabled()) {
+    // return serveFileWithCGI(server, location, request);
+    // }
+
+    // Traiter les autres méthodes ou renvoyer une réponse par défaut
+    return handleError(400, server); // Bad Request par défaut pour les autres types de requêtes
+}
+
+HttpResponse RequestHandler::serveStaticFile(const Server* server, const Location* location, const HttpRequest& request) const 
+{
+    HttpResponse response;
 
     // Déterminer le répertoire racine et le fichier index
     std::string root = server->getRoot();
@@ -130,9 +149,8 @@ HttpResponse RequestHandler::process(const Server* server, const Location* locat
 
     // Construire le chemin complet du fichier demandé
     std::string requestPath = request.getPath();
-    // Ajouter le fichier index si le chemin se termine par '/'
     if (requestPath[requestPath.size() - 1] == '/')
-        requestPath += index; 
+        requestPath += index;
     //retirer la location de requestPath si la directive root est parametree en son sein 
     if (location && location->getRootIsSet())
     {
@@ -146,36 +164,18 @@ HttpResponse RequestHandler::process(const Server* server, const Location* locat
     }
 
     std::string fullPath = root + requestPath;
-
-    std::cout << "Serving file: " << fullPath << std::endl;//test
+    std::cout << "Serving file: " << fullPath << std::endl;
 
     // Vérifier la sécurité du chemin
     if (!isPathSecure(root, fullPath)) {
         return handleError(403, server); // Forbidden
     }
 
-    // Vérifier si le chemin est un répertoire
-    struct stat pathStat;
-    if (stat(fullPath.c_str(), &pathStat) == 0 && S_ISDIR(pathStat.st_mode)) {
-        if (location && location->getAutoIndex()) {
-            // Générer une liste d'index
-            std::string indexPage = generateAutoIndex(fullPath, requestPath);
-            response.setStatusCode(200);
-            response.setBody(indexPage);
-            response.setHeader("Content-Type", "text/html");
-            return response;
-        } else {
-            // Si autoindex n'est pas activé, renvoyer une erreur 403 Forbidden
-            return handleError(403, server);
-        }
-    }
-
     // Ouvrir le fichier demandé
     std::ifstream file(fullPath.c_str(), std::ios::in | std::ios::binary);
     if (!file.is_open()) {
-        // Fichier non trouvé, renvoyer une erreur 404
         std::cout << "File not found: " << fullPath << std::endl;
-        return handleError(404, server);
+        return handleError(404, server); // File Not Found
     }
 
     // Lire le contenu du fichier
@@ -187,6 +187,7 @@ HttpResponse RequestHandler::process(const Server* server, const Location* locat
     // Définir les en-têtes et le corps de la réponse
     response.setStatusCode(200);
     response.setBody(fileContent);
+
     // Définir le Content-Type en fonction de l'extension du fichier
     size_t dotPos = fullPath.find_last_of('.');
     if (dotPos != std::string::npos) {
@@ -200,16 +201,111 @@ HttpResponse RequestHandler::process(const Server* server, const Location* locat
     return response;
 }
 
+// #include <cstdlib>  // Pour getenv, setenv
+// #include <sys/wait.h>  // Pour waitpid
+// #include <unistd.h>  // Pour fork, execve
+// #include <iostream>
+// #include <vector>
+// #include <fstream>
+// #include <sstream>
+
+// HttpResponse RequestHandler::serveFileWithCGI(const Server* server, const Location* location, const HttpRequest& request) const {
+//     HttpResponse response;
+
+//     // Déterminer le chemin du script CGI et le PATH_INFO
+//     std::string scriptPath = location->getCgiPath();  // Obtenir le chemin du script CGI à partir de la configuration
+//     std::string pathInfo = request.getPath();         // Obtenir le PATH_INFO de la requête HTTP
+
+//     // Ajouter le PATH_INFO après le script pour lui indiquer le fichier à traiter
+//     std::string scriptFilePath = scriptPath + pathInfo;
+
+//     // Variables d'environnement CGI nécessaires
+//     std::vector<std::string> envVars;
+//     envVars.push_back("GATEWAY_INTERFACE=CGI/1.1");
+//     envVars.push_back("SERVER_PROTOCOL=HTTP/1.1");
+//     envVars.push_back("REQUEST_METHOD=" + request.getMethod());
+//     envVars.push_back("PATH_INFO=" + pathInfo);
+//     envVars.push_back("SCRIPT_FILENAME=" + scriptFilePath);
+//     envVars.push_back("CONTENT_TYPE=" + request.getHeader("Content-Type"));
+//     envVars.push_back("CONTENT_LENGTH=" + request.getHeader("Content-Length"));
+//     envVars.push_back("QUERY_STRING=" + request.getQueryString());
+//     envVars.push_back("REMOTE_ADDR=" + request.getRemoteAddress());
+
+//     // Convertir les variables d'environnement en tableau de char* pour execve
+//     std::vector<char*> envp;
+//     for (size_t i = 0; i < envVars.size(); ++i) {
+//         envp.push_back(const_cast<char*>(envVars[i].c_str()));
+//     }
+//     envp.push_back(NULL);  // Fin du tableau de variables d'environnement
+
+//     // Tableau d'arguments pour execve
+//     char* const argv[] = {const_cast<char*>(scriptPath.c_str()), NULL};
+
+//     // Créer un pipe pour capturer la sortie du CGI
+//     int pipefd[2];
+//     if (pipe(pipefd) == -1) {
+//         return handleError(500, server);  // Erreur interne
+//     }
+
+//     // Fork pour exécuter le processus CGI
+//     pid_t pid = fork();
+//     if (pid == -1) {
+//         return handleError(500, server);  // Erreur interne
+//     } else if (pid == 0) {
+//         // Processus enfant - exécution du script CGI
+//         close(pipefd[0]);  // Fermer la lecture dans le pipe
+
+//         // Rediriger stdout vers l'écriture dans le pipe
+//         dup2(pipefd[1], STDOUT_FILENO);
+//         close(pipefd[1]);
+
+//         // Exécuter le script CGI avec execve
+//         execve(scriptPath.c_str(), argv, envp.data());
+//         std::cerr << "Failed to execute CGI script: " << scriptPath << std::endl;
+//         _exit(EXIT_FAILURE);  // Sortir en cas d'échec
+//     } else {
+//         // Processus parent - lire la sortie du CGI
+//         close(pipefd[1]);  // Fermer l'écriture dans le pipe
+
+//         // Lire la sortie du processus CGI
+//         std::stringstream cgiOutput;
+//         char buffer[1024];
+//         ssize_t bytesRead;
+//         while ((bytesRead = read(pipefd[0], buffer, sizeof(buffer))) > 0) {
+//             cgiOutput.write(buffer, bytesRead);
+//         }
+//         close(pipefd[0]);
+
+//         // Attendre que le processus CGI se termine
+//         int status;
+//         waitpid(pid, &status, 0);
+
+//         // Vérifier si le CGI a retourné une sortie correcte
+//         if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+//             // Créer la réponse avec la sortie du CGI
+//             response.setStatusCode(200);
+//             response.setBody(cgiOutput.str());
+//             response.setHeader("Content-Type", "text/html");  // Type par défaut, à ajuster selon le script CGI
+//         } else {
+//             return handleError(500, server);  // Erreur interne si le CGI a échoué
+//         }
+//     }
+
+//     return response;
+// }
+
+
 HttpResponse RequestHandler::handleFileUpload(const HttpRequest& request, const Location* location) const {
+    std::cout << RED << "RequestHandler::handleFileUpload" << RESET << std::endl;//test
     HttpResponse response;
 
     // Extraire la limite (boundary) de l'en-tête Content-Type
     std::string contentType = request.getHeader("Content-Type");
     std::string boundary;
-    std::smatch match;
-    std::regex boundaryRegex("boundary=(.*)");
-    if (std::regex_search(contentType, match, boundaryRegex)) {
-        boundary = "--" + match.str(1);
+    std::string boundaryPrefix = "boundary=";
+    std::string::size_type boundaryPos = contentType.find(boundaryPrefix);
+    if (boundaryPos != std::string::npos) {
+        boundary = "--" + contentType.substr(boundaryPos + boundaryPrefix.length());
     } else {
         response.setStatusCode(400);
         response.setBody("No boundary found in multipart request.");
@@ -236,13 +332,13 @@ HttpResponse RequestHandler::handleFileUpload(const HttpRequest& request, const 
         std::string fileData = part.substr(headerEnd + 4);
 
         // Vérifier si cette partie est un fichier
-        if (headers.find("filename=") != std::string::npos) {
-            // Extraire le nom de fichier
-            std::regex filenameRegex("filename=\"([^\"]+)\"");
-            std::smatch filenameMatch;
-            if (std::regex_search(headers, filenameMatch, filenameRegex)) {
-                std::string filename = filenameMatch.str(1);
-                
+        std::string filenamePrefix = "filename=\"";
+        std::string::size_type filenamePos = headers.find(filenamePrefix);
+        if (filenamePos != std::string::npos) {
+            std::string::size_type filenameEndPos = headers.find("\"", filenamePos + filenamePrefix.length());
+            if (filenameEndPos != std::string::npos) {
+                std::string filename = headers.substr(filenamePos + filenamePrefix.length(), filenameEndPos - (filenamePos + filenamePrefix.length()));
+
                 // Construire le chemin complet pour sauvegarder le fichier
                 std::string uploadDirectory = location->getUploadStore();  // Obtenir le répertoire d'upload depuis la configuration
                 std::string fullPath = uploadDirectory + "/" + filename;

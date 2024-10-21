@@ -39,6 +39,12 @@ private:
     // Vérifie la sécurité du chemin pour éviter les traversées de répertoires
     bool isPathSecure(const std::string& root, const std::string& fullPath) const;
 
+    // Gere le service de fichiers statiques
+    HttpResponse serveStaticFile(const Server* server, const Location* location, const HttpRequest& request) const;
+
+    // Gere les cgi
+    // HttpResponse serveFileWithCGI(const Server* server, const Location* location, const HttpRequest& request) const;
+
     // Gere les uploads de fichiers
     HttpResponse handleFileUpload(const HttpRequest& request, const Location* location) const;
     // Gère les erreurs personnalisées
