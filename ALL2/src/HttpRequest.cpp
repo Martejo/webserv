@@ -138,3 +138,14 @@ std::string HttpRequest::getHeader(const std::string& headerName) const {
 const std::string& HttpRequest::getBody() const {
     return body;
 }
+
+std::string HttpRequest::getQueryString() const {
+    // Chercher le point d'interrogation dans l'URL pour trouver la partie de la chaîne de requête
+    std::string::size_type pos = path.find('?');
+    if (pos != std::string::npos && pos + 1 < path.size()) {
+        // Retourner tout ce qui se trouve après le "?"
+        return path.substr(pos + 1);
+    }
+    // Si aucun paramètre n'existe, retourner une chaîne vide
+    return "";
+}

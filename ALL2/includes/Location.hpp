@@ -29,6 +29,9 @@ public:
     void setAutoIndex(bool autoIndex);
     bool getAutoIndex() const;
 
+    void setCGIEnable(bool autoIndex);
+    bool getCGIEnable() const;
+
     void setIndex(const std::string &index);
     const std::string &getIndex() const;
 
@@ -45,6 +48,8 @@ public:
     size_t getClientMaxBodySize() const;
 
     bool getRootIsSet() const;
+    bool getIndexIsSet() const;
+    bool getClientMaxBodySizeIsSet() const;
 
     // Méthodes pour gérer les pages d'erreur
     void addErrorPage(int statusCode, const std::string &uri);
@@ -73,6 +78,7 @@ private:
     std::vector<std::string> allowedMethods_;
     std::string redirection_;
     bool autoIndex_;
+    bool cgiEnable_;
     std::string cgiExtension_;
     bool uploadEnable_;
     std::string uploadStore_;

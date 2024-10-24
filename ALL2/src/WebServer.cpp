@@ -2,6 +2,7 @@
 #include "../includes/ConfigParser.hpp"
 #include "../includes/ListeningSocket.hpp"
 #include "../includes/DataSocket.hpp"
+#include "../includes/RequestHandler.hpp"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -109,11 +110,34 @@ void WebServer::runEventLoop() {
                 if (!dataSocket->receiveData()) {
                     // std::cout << "WebServer::runEventLoop  : Fermeture de la connexion fd " << dataSocket->getSocket() << "." << std::endl;//test
                     dataSocket->closeSocket();
-                } else if (dataSocket->isRequestComplete()) {
+                } 
+                else if (dataSocket->isRequestComplete()) {
                     // std::cout << "WebServer::runEventLoop  : Requête complète reçue sur fd " << dataSocket->getSocket() << "." << std::endl;//test
-                    dataSocket->processRequest();
+                    // Créer une instance de RequestHandler
+                    RequestHandler handler(*config_, dataSocket->getAssociatedServers());
+                    // Traiter la requête et obtenir la réponse
+                    HttpResponse response = handler.handleRequest(dataSocket->getHttpRequest());
                     dataSocket->closeSocket();
                 }
+            }
+            else if (pollfds[index].revents & POLLOUT)
+            {
+                DataSocket* dataSocket = dataSockets[dataIndex];
+                if (dataSocket->isRequestComplete()) {
+                    // std::cout << "WebServer::runEventLoop  : Requête complète reçue sur fd " << dataSocket->getSocket() << "." << std::endl;//test
+                    // Créer une instance de RequestHandler
+                    RequestHandler handler(*config_, dataSocket->getAssociatedServers());
+                    // Traiter la requête et obtenir la réponse
+                    HttpResponse response = handler.handleRequest(dataSocket->getHttpRequest());
+                    dataSocket->closeSocket();
+                    dataSocket.sendResponse(response);
+                }
+
+            }
+            else if (pollfds[index].revents & POLLERR)
+            {
+                DataSocket* dataSocket = dataSockets[dataIndex];
+                dataSocket->closeSocket();
             }
         }
 

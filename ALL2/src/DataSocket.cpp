@@ -21,8 +21,6 @@ bool DataSocket::receiveData() {
 
     char buffer[4096];
     ssize_t bytesRead = recv(client_fd_, buffer, sizeof(buffer), 0);
-    //add
-    //faire une boucle while ici pour gerer les requetes en plusieurs parties
     
     if (bytesRead > 0) {
         std::string data(buffer, bytesRead);
@@ -95,3 +93,4 @@ void DataSocket::closeSocket() {
 int DataSocket::getSocket() const {
     return client_fd_;
 }
+

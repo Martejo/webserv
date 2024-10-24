@@ -31,7 +31,8 @@ private:
     HttpResponse process(const Server* server, const Location* location, const HttpRequest& request) const;
 
     // Génère une page d'index automatique
-    std::string generateAutoIndex(const std::string& fullPath, const std::string& requestPath) const;
+    HttpResponse generateAutoIndex(const std::string& fullPath, const std::string& requestPath) const;
+
 
     // Détermine le type MIME basé sur l'extension
     std::string getMimeType(const std::string& extension) const;
@@ -43,7 +44,7 @@ private:
     HttpResponse serveStaticFile(const Server* server, const Location* location, const HttpRequest& request) const;
 
     // Gere les cgi
-    // HttpResponse serveFileWithCGI(const Server* server, const Location* location, const HttpRequest& request) const;
+    HttpResponse serveFileWithCGI(const Server* server, const Location* location, const HttpRequest& request) const;
 
     // Gere les uploads de fichiers
     HttpResponse handleFileUpload(const HttpRequest& request, const Location* location) const;

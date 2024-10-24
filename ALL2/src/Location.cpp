@@ -79,6 +79,15 @@ bool Location::getAutoIndex() const
     return autoIndex_;
 }
 
+void Location::setCGIEnable(bool cgiEnable)
+{
+    cgiEnable_ = cgiEnable;
+}
+
+bool Location::getCGIEnable() const
+{
+    return cgiEnable_;
+}
 void Location::setIndex(const std::string &index)
 {
     index_ = index;
@@ -164,6 +173,15 @@ bool Location::getRootIsSet() const
     return(rootIsSet_);
 }
 
+bool Location::getIndexIsSet() const
+{
+    return(indexIsSet_);
+}
+
+bool Location::getClientMaxBodySizeIsSet() const
+{
+    return(clientMaxBodySizeIsSet_);
+}
 
 // DEBUG
 void Location::displayLocation() const
@@ -172,6 +190,7 @@ void Location::displayLocation() const
     std::cout << "    root: " << this->getRoot() << std::endl;
     std::cout << "    index: " << this->getIndex() << std::endl;
     std::cout << "    autoindex: " << (this->getAutoIndex() ? "on" : "off") << std::endl;
+    std::cout << "    cgi enabled: " << (this->getCGIEnable() ? "on" : "off") << std::endl;
 
     // Afficher les méthodes autorisées
     const std::vector<std::string> &methods = this->getAllowedMethods();

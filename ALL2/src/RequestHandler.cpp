@@ -78,7 +78,7 @@ const Location* RequestHandler::selectLocation(const Server* server, const HttpR
     }
     
     // if(matchedLocation)
-    //     std::cout << matchedLocation->getPath() << std::endl;//test
+        // std::cout << matchedLocation->getPath() << std::endl;//test
     return matchedLocation;
 }
 
@@ -116,19 +116,20 @@ HttpResponse RequestHandler::process(const Server* server, const Location* locat
         return response;
     }
 
+    std::cout <<RED <<  location->getCgiExtension() << location->getCGIEnable() << RESET << std::endl;//test
+    //si le fichier est un cgi, le traiter comme tel
+    if (location && location->getCgiExtension() != "" && location->getCGIEnable() && endsWith(request.getPath(), location->getCgiExtension()))
+    {
+        return serveFileWithCGI(server, location, request);
+    }
     // Si la méthode est GET, simplement servir le fichier HTML
-    if (request.getMethod() == "GET") {
+    else if (request.getMethod() == "GET") {
         return serveStaticFile(server, location, request); // Fonction servant les fichiers statiques (comme upload.html)
     }
-
     // Traiter les uploads si la méthode est POST et si l'upload est activé
-    if (request.getMethod() == "POST" && location && location->getUploadEnable()) {
+    else if (request.getMethod() == "POST" && location && location->getUploadEnable()) {
         return handleFileUpload(request, location);
     }
-
-    // if (location && location->isCgiEnabled()) {
-    // return serveFileWithCGI(server, location, request);
-    // }
 
     // Traiter les autres méthodes ou renvoyer une réponse par défaut
     return handleError(400, server); // Bad Request par défaut pour les autres types de requêtes
@@ -150,7 +151,12 @@ HttpResponse RequestHandler::serveStaticFile(const Server* server, const Locatio
     // Construire le chemin complet du fichier demandé
     std::string requestPath = request.getPath();
     if (requestPath[requestPath.size() - 1] == '/')
+    {
+        std::cout<< GREEN <<"'" <<location->getIndexIsSet() << "'" << location->getAutoIndex()<< RESET << std::endl;//test
+        if (location && !location->getIndexIsSet() && location->getAutoIndex())
+            return(generateAutoIndex(root + requestPath, requestPath));
         requestPath += index;
+    }
     //retirer la location de requestPath si la directive root est parametree en son sein 
     if (location && location->getRootIsSet())
     {
@@ -201,19 +207,20 @@ HttpResponse RequestHandler::serveStaticFile(const Server* server, const Locatio
     return response;
 }
 
-// #include <cstdlib>  // Pour getenv, setenv
-// #include <sys/wait.h>  // Pour waitpid
-// #include <unistd.h>  // Pour fork, execve
-// #include <iostream>
-// #include <vector>
-// #include <fstream>
-// #include <sstream>
+#include <cstdlib>  // Pour getenv, setenv
+#include <sys/wait.h>  // Pour waitpid
+#include <unistd.h>  // Pour fork, execve
+#include <iostream>
+#include <vector>
+#include <fstream>
+#include <sstream>
 
 // HttpResponse RequestHandler::serveFileWithCGI(const Server* server, const Location* location, const HttpRequest& request) const {
 //     HttpResponse response;
 
 //     // Déterminer le chemin du script CGI et le PATH_INFO
-//     std::string scriptPath = location->getCgiPath();  // Obtenir le chemin du script CGI à partir de la configuration
+//     // std::string scriptPath = location->getCgiPath();  // Obtenir le chemin du script CGI à partir de la configuration
+//     std::string scriptPath = "/usr/bin/python3";  // Obtenir le chemin du script CGI à partir de la configuration
 //     std::string pathInfo = request.getPath();         // Obtenir le PATH_INFO de la requête HTTP
 
 //     // Ajouter le PATH_INFO après le script pour lui indiquer le fichier à traiter
@@ -294,6 +301,98 @@ HttpResponse RequestHandler::serveStaticFile(const Server* server, const Locatio
 //     return response;
 // }
 
+HttpResponse RequestHandler::serveFileWithCGI(const Server* server, const Location* location, const HttpRequest& request) const {
+    HttpResponse response;
+    (void)location;//debug
+    // Déterminer le chemin du script CGI et le PATH_INFO
+    std::string scriptPath = server->getRoot();  // Obtenir le chemin du script CGI à partir de la configuration
+    std::string pathInfo = request.getPath();         // Obtenir le PATH_INFO de la requête HTTP
+
+    // Ajouter le PATH_INFO après le script pour lui indiquer le fichier à traiter
+    std::string scriptFilePath = scriptPath + pathInfo;
+    std::cout <<RED<< "RequestHandler::serveFileWithCGI path :"<< server->getRoot() << "request path :" << request.getPath() << RESET <<std::endl; //test
+    std::cout <<GREEN << "Scriptfilepath :" << scriptFilePath << RESET <<std::endl; //test
+
+    // Variables d'environnement CGI nécessaires
+    std::vector<std::string> envVars;
+    envVars.push_back("GATEWAY_INTERFACE=CGI/1.1");
+    envVars.push_back("SERVER_PROTOCOL=HTTP/1.1");
+    envVars.push_back("REQUEST_METHOD=" + request.getMethod());
+    envVars.push_back("PATH_INFO=" + pathInfo);
+    envVars.push_back("SCRIPT_FILENAME=" + scriptFilePath);
+    envVars.push_back("CONTENT_TYPE=" + request.getHeader("Content-Type"));
+    envVars.push_back("CONTENT_LENGTH=" + request.getHeader("Content-Length"));
+    envVars.push_back("QUERY_STRING=" + request.getQueryString()); //utile pour les requetes get
+
+    // Convertir les variables d'environnement en tableau de char* pour execve
+    std::vector<char*> envp;
+    for (size_t i = 0; i < envVars.size(); ++i) {
+        envp.push_back(const_cast<char*>(envVars[i].c_str()));
+    }
+    envp.push_back(NULL);  // Fin du tableau de variables d'environnement
+
+    // Tableau d'arguments pour execve, modifié pour utiliser Python
+    char* const argv[] = {const_cast<char*>("/usr/bin/python3"), const_cast<char*>(scriptFilePath.c_str()), NULL};
+
+    // Changer le répertoire de travail pour l'accès au fichier de chemin relatif
+    // std::string workingDirectory = scriptPath; // Obtient le répertoire de travail pour le CGI
+    // if (chdir(workingDirectory.c_str()) != 0) {
+    //     return handleError(500, server);  // Erreur interne si le changement de répertoire échoue
+    // }
+
+    // Créer un pipe pour capturer la sortie du CGI
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        return handleError(500, server);  // Erreur interne
+    }
+
+    // Fork pour exécuter le processus CGI
+    pid_t pid = fork();
+    if (pid == -1) {
+        return handleError(500, server);  // Erreur interne
+    } else if (pid == 0) {
+        // Processus enfant - exécution du script CGI
+        close(pipefd[0]);  // Fermer la lecture dans le pipe
+
+        // Rediriger stdout vers l'écriture dans le pipe
+        dup2(pipefd[1], STDOUT_FILENO);
+        close(pipefd[1]);
+
+        // Exécuter le script CGI avec execve
+        execve(argv[0], argv, envp.data());
+        std::cerr << "Failed to execute CGI script: " << scriptFilePath << std::endl;
+        _exit(EXIT_FAILURE);  // Sortir en cas d'échec
+    } else {
+        // Processus parent - lire la sortie du CGI
+        close(pipefd[1]);  // Fermer l'écriture dans le pipe
+
+        // Lire la sortie du processus CGI (attention read = processus bloquant)
+        std::stringstream cgiOutput;
+        char buffer[1024];
+        ssize_t bytesRead;
+        while ((bytesRead = read(pipefd[0], buffer, sizeof(buffer))) > 0) {
+            cgiOutput.write(buffer, bytesRead);
+        }
+        close(pipefd[0]);
+
+        // Attendre que le processus CGI se termine (attention = processus bloquant = un script infini bloque le serveur)
+        int status;
+        waitpid(pid, &status, 0);
+
+        // Vérifier si le CGI a retourné une sortie correcte
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+            // Créer la réponse avec la sortie du CGI
+            response.setStatusCode(200);
+            response.setBody(cgiOutput.str());
+            response.setHeader("Content-Type", "text/html");  // Type par défaut, à ajuster selon le script CGI
+        } else {
+            return handleError(500, server);  // Erreur interne si le CGI a échoué
+        }
+    }
+
+    return response;
+}
+
 
 HttpResponse RequestHandler::handleFileUpload(const HttpRequest& request, const Location* location) const {
     std::cout << RED << "RequestHandler::handleFileUpload" << RESET << std::endl;//test
@@ -364,8 +463,11 @@ HttpResponse RequestHandler::handleFileUpload(const HttpRequest& request, const 
     return response;
 }
 
-std::string RequestHandler::generateAutoIndex(const std::string& fullPath, const std::string& requestPath) const {
+HttpResponse RequestHandler::generateAutoIndex(const std::string& fullPath, const std::string& requestPath) const {
+    std::cout << RED << "RequestHandler::generateAutoIndex" << RESET << std::endl; // test
     std::stringstream ss;
+    
+    // Génération du contenu HTML
     ss << "<html><head><title>Index of " << requestPath << "</title></head><body>";
     ss << "<h1>Index of " << requestPath << "</h1><ul>";
 
@@ -384,7 +486,14 @@ std::string RequestHandler::generateAutoIndex(const std::string& fullPath, const
     }
 
     ss << "</ul></body></html>";
-    return ss.str();
+
+    // Créer la réponse HTTP
+    HttpResponse response;
+    response.setStatusCode(200); // Code d'état 200 OK
+    response.setBody(ss.str()); // Corps de la réponse
+    response.setHeader("Content-Type", "text/html; charset=UTF-8"); // Définir le type de contenu
+
+    return response; // Retourner l'objet HttpResponse
 }
 
 std::string RequestHandler::getMimeType(const std::string& extension) const {

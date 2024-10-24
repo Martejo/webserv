@@ -408,6 +408,24 @@ void ConfigParser::parseLocation(Server &server)
                 throw ParsingException("';' attendu après la valeur de 'autoindex'");
             ++currentTokenIndex_;
         }
+
+        else if (token == "cgi")
+        {
+            ++currentTokenIndex_;
+            if (currentTokenIndex_ >= tokens_.size())
+                throw ParsingException("'on' ou 'off' attendu après 'autoindex'");
+            if (tokens_[currentTokenIndex_] == "on")
+                location.setCGIEnable(true);
+            else if (tokens_[currentTokenIndex_] == "off")
+                location.setCGIEnable(false);
+            else
+                throw ParsingException("Valeur invalide pour 'cgi': " + tokens_[currentTokenIndex_]);
+            ++currentTokenIndex_;
+            if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != ";")
+                throw ParsingException("';' attendu après la valeur de 'cgi'");
+            ++currentTokenIndex_;
+        }
+
         else if (token == "limit_except")
         {
             ++currentTokenIndex_;
