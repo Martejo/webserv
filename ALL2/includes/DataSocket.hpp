@@ -31,14 +31,12 @@ public:
 
     // Obtient le descripteur de fichier
     int getSocket() const;
-    std::vector<Server*> getAssociatedServers() const;
-    int getSocket() const;
 
 private:
     int client_fd_;
     std::vector<Server*> associatedServers_;
     HttpRequest httpRequest_;
-    // HttpResponse httpResponse_;
+    HttpResponse httpResponse_;
     bool requestComplete_;
 
     const Config& config_;
