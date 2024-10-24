@@ -1,0 +1,403 @@
+#include "../includes/DataSocket.hpp"
+#include "../includes/RequestHandler.hpp"
+#include "../includes/Color_Macros.hpp"
+#include <unistd.h>
+#include <cstring>
+#include <iostream>
+#include <algorithm>
+
+DataSocket::DataSocket(int fd, const std::vector<Server*>& servers, const Config& config)
+    : client_fd_(fd), associatedServers_(servers), requestComplete_(false), config_(config), sendBufferOffset_(0) {
+}
+
+DataSocket::~DataSocket() {
+    closeSocket();
+}
+
+bool DataSocket::receiveData() {
+    char buffer[4096];
+    ssize_t bytesRead = recv(client_fd_, buffer, sizeof(buffer), 0);
+
+    if (bytesRead > 0) {
+        // Convertir les données reçues en chaîne de caractères
+        std::string data(buffer, bytesRead);
+        std::cout << BLUE << "REQUETE RECUE DataSocket::receiveData(): \n" << data << std::endl; //test
+        std::cout << "Received " << bytesRead << " bytes." << std::endl;
+
+        // Ajouter les données au buffer de la requête
+        httpRequest_.appendData(data);
+
+        // Essayer de parser la requête, vérifier si elle est complète
+        if (httpRequest_.parseRequest()) {
+            requestComplete_ = httpRequest_.isComplete();
+            if (requestComplete_) {
+                std::cout << "Requête complète reçue." << std::endl; //test
+            }
+        }
+        return true;
+    } else if (bytesRead == 0) {
+        // Le client a fermé la connexion
+        std::cout << "Client closed the connection." << std::endl;
+        return false;
+    } else {
+        // Si `recv()` retourne une erreur (< 0), fermer la connexion
+        std::cerr << "Error receiving data. Closing connection." << std::endl;
+        return false;
+    }
+}
+
+bool DataSocket::isRequestComplete() const {
+    return requestComplete_;
+}
+
+void DataSocket::processRequest() {
+    // Créer une instance de RequestHandler pour traiter la requête HTTP
+    RequestHandler handler(config_, associatedServers_);
+    HttpResponse response = handler.handleRequest(httpRequest_);
+
+    // Générer la réponse à envoyer au client
+    sendBuffer_ = response.generateResponse();
+    sendBufferOffset_ = 0;  // Réinitialiser l'offset pour commencer l'envoi depuis le début
+}
+
+bool DataSocket::sendData() {
+    if (sendBuffer_.empty()) {
+        return true;  // Rien à envoyer
+    }
+
+    // Envoyer les données présentes dans le buffer d'envoi, en gérant les envois partiels
+    ssize_t bytesSent = send(client_fd_, sendBuffer_.c_str() + sendBufferOffset_, sendBuffer_.size() - sendBufferOffset_, 0);
+    
+    if (bytesSent > 0) {
+        sendBufferOffset_ += bytesSent;
+
+        // Si tout a été envoyé, vider le tampon
+        if (sendBufferOffset_ >= sendBuffer_.size()) {
+            clearSendBuffer();
+            return true;  // Envoi terminé avec succès
+        }
+    } else if (bytesSent == 0) {
+        // Si le client a fermé la connexion, retourner faux pour fermer la socket
+        std::cout << "Client closed the connection during send." << std::endl;
+        return false;
+    } else {
+        // Si `send()` retourne une erreur (< 0), fermer la connexion
+        std::cerr << "Error sending data. Closing connection." << std::endl;
+        return false;
+    }
+
+    return true;  // Retourner vrai pour continuer l'envoi lors du prochain appel à poll/select
+}
+
+bool DataSocket::hasDataToSend() const {
+    return !sendBuffer_.empty();
+}
+
+void DataSocket::clearSendBuffer() {
+    sendBuffer_.clear();
+    sendBufferOffset_ = 0;
+}
+
+void DataSocket::closeSocket() {
+    if (client_fd_ != -1) {
+        close(client_fd_);
+        client_fd_ = -1;
+        std::cout << "DataSocket::closeSocket : Socket closed." << std::endl; //test
+    }
+}
+
+int DataSocket::getSocket() const {
+    return client_fd_;
+}
+// HttpRequest.cpp
+#include "../includes/HttpRequest.hpp"
+#include "../includes/Color_Macros.hpp"
+#include <sstream>
+#include <algorithm>
+#include <cctype>
+#include <iostream>
+
+HttpRequest::HttpRequest()
+    : method(""), path(""), httpVersion(""), body(""), contentLength(0), headersParsed(false), state_(REQUEST_LINE) {
+}
+
+HttpRequest::~HttpRequest() {
+}
+
+void HttpRequest::appendData(const std::string& data) {
+    rawData += data;
+}
+
+bool HttpRequest::isComplete() const {
+    if (!headersParsed) {
+        // std::cout << "HttpRequest::isComplete()  : headers are not parsed " << std::endl;//test
+        return false;
+    }
+    // std::cout << "HttpRequest::isComplete()  : body size: " << body.size() << " / " << contentLength << std::endl;//test
+
+    return body.size() >= contentLength;
+}
+
+bool HttpRequest::parseRequest() {
+    // std::cout << "HttpRequest::parseRequest" << std::endl; //test
+
+    std::istringstream stream(rawData);
+    std::string line;
+
+    while (state_ != COMPLETE && std::getline(stream, line)) {
+        if (state_ == REQUEST_LINE) {
+            if (line.empty()) {
+                std::cout << "HttpRequest::parseRequest()  : Empty request line. Waiting for more data." << std::endl;//test
+                return false; // Attendre plus de données
+            }
+            parseRequestLine(line);
+            state_ = HEADERS;
+        }
+        else if (state_ == HEADERS) {
+            if (line == "\r" || line.empty()) {
+                headersParsed = true;
+                // Déterminer la longueur du corps
+                std::map<std::string, std::string>::iterator it = headers.find("Content-Length");
+                if (it != headers.end()) {
+                    contentLength = static_cast<size_t>(atoi(it->second.c_str()));
+                } else {
+                    contentLength = 0;
+                }
+
+                if (contentLength > 0) {
+                    state_ = BODY;
+                } else {
+                    state_ = COMPLETE;
+                }
+            }
+            else {
+                parseHeaderLine(line);
+            }
+        }
+        else if (state_ == BODY) {
+            // Calculer le nombre de caractères déjà lus dans le corps
+            size_t bodyStartPos = rawData.find("\r\n\r\n");
+            if (bodyStartPos != std::string::npos) {
+                bodyStartPos += 4; // Passer les "\r\n\r\n"
+                body = rawData.substr(bodyStartPos, contentLength);
+                if (body.size() >= contentLength) {
+                    state_ = COMPLETE;
+                } else {
+                    std::cout << "HttpRequest::parseRequest()  : Body not complete yet. Received " << body.size() << " bytes, expecting " << contentLength << " bytes." << std::endl; //test
+                    return false; // Attendre plus de données
+                }
+            }
+            else {
+                std::cout << "HttpRequest::parseRequest()  : End of headers not found while parsing body. Waiting for more data." << std::endl; //test
+                return false; // Attendre plus de données
+            }
+        }
+    }
+    std::cout << "HttpRequest::parseRequest()  : request is complete"<< std::endl; //test
+    return state_ == COMPLETE;
+}
+
+void HttpRequest::parseRequestLine(const std::string& line) {
+    std::istringstream lineStream(line);
+    lineStream >> method >> path >> httpVersion;
+
+    // Supprimer le retour chariot de httpVersion s'il est présent
+    if (!httpVersion.empty() && httpVersion[httpVersion.size() - 1] == '\r') {
+        httpVersion.erase(httpVersion.size() - 1);
+    }
+
+    // std::cout << "HttpRequest::parseRequestLine  : Parsed request line: " << method << " " << path << " " << httpVersion << std::endl;//test
+}
+
+void HttpRequest::parseHeaderLine(const std::string& line) {
+    std::string::size_type pos = line.find(':');
+    if (pos != std::string::npos) {
+        std::string headerName = line.substr(0, pos);
+        std::string headerValue = line.substr(pos + 1);
+
+        // Supprimer les espaces
+        headerName.erase(headerName.find_last_not_of(" \t\r\n") + 1);
+        headerValue.erase(0, headerValue.find_first_not_of(" \t\r\n"));
+        headerValue.erase(headerValue.find_last_not_of(" \t\r\n") + 1);
+
+        headers[headerName] = headerValue;
+
+        // std::cout << "HttpRequest::parseRequestLine  : Parsed header: " << headerName << " = '" << headerValue << "'"  << std::endl;//test
+    }
+}
+
+const std::string& HttpRequest::getMethod() const {
+    return method;
+}
+
+const std::string& HttpRequest::getPath() const {
+    return path;
+}
+
+const std::string& HttpRequest::getHttpVersion() const {
+    return httpVersion;
+}
+
+std::string HttpRequest::getHeader(const std::string& headerName) const {
+    std::map<std::string, std::string>::const_iterator it = headers.find(headerName);
+    if (it != headers.end()) {
+        return it->second;
+    }
+    return "";
+}
+
+const std::string& HttpRequest::getBody() const {
+    return body;
+}
+
+std::string HttpRequest::getQueryString() const {
+    // Chercher le point d'interrogation dans l'URL pour trouver la partie de la chaîne de requête
+    std::string::size_type pos = path.find('?');
+    if (pos != std::string::npos && pos + 1 < path.size()) {
+        // Retourner tout ce qui se trouve après le "?"
+        return path.substr(pos + 1);
+    }
+    // Si aucun paramètre n'existe, retourner une chaîne vide
+    return "";
+}#include "../includes/WebServer.hpp"
+#include "../includes/ConfigParser.hpp"
+#include "../includes/ListeningSocket.hpp"
+#include "../includes/DataSocket.hpp"
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <stdexcept>
+#include <arpa/inet.h> // Pour htons, htonl
+#include <poll.h>
+#include <unistd.h>    // Pour close()
+
+// Constructeur par défaut : initialisation si nécessaire
+WebServer::WebServer() : config_(NULL) {}
+
+WebServer::~WebServer()
+{
+    cleanUp();
+    if (config_ != NULL)
+    {
+        delete config_;
+        config_ = NULL;
+    }
+}
+
+// Charge les configurations à partir du fichier
+void WebServer::loadConfiguration(const std::string& configFile) 
+{
+    try
+    {
+        ConfigParser parser(configFile);
+        config_ = parser.parse();
+        // config_->displayConfig();//test
+    }
+    catch (const ParsingException &e)
+    {
+        throw (e);
+    }
+}
+
+// Démarre le serveur
+void WebServer::start() {
+    if (config_ == NULL) {
+        throw std::runtime_error("Configuration non chargée.");
+    }
+
+    const std::vector<Server*>& servers = config_->getServers();
+    listeningHandler_.initialize(servers);
+    std::cout << "Serveur démarré avec " << servers.size() << " serveurs." << std::endl;//test
+}
+
+void WebServer::runEventLoop() {
+    std::cout << "WebServer::runEventLoop() : Début de la boucle d'événements." << std::endl;
+
+    while (true) {
+        std::vector<pollfd> pollfds;
+
+        // Initialiser les pollfd pour les sockets d'écoute
+        const std::vector<ListeningSocket*>& listeningSockets = listeningHandler_.getListeningSockets();
+        for (size_t i = 0; i < listeningSockets.size(); ++i) {
+            pollfd pfd;
+            pfd.fd = listeningSockets[i]->getSocket();
+            pfd.events = POLLIN;  // Surveiller uniquement les événements de lecture pour accepter les connexions
+            pollfds.push_back(pfd);
+        }
+
+        // Ajouter les pollfd pour les sockets de données (lecture et écriture)
+        const std::vector<DataSocket*>& dataSockets = dataHandler_.getClientSockets();
+        for (size_t i = 0; i < dataSockets.size(); ++i) {
+            pollfd pfd;
+            pfd.fd = dataSockets[i]->getSocket();
+            pfd.events = POLLIN;  // Par défaut, surveiller la lecture
+
+            if (dataSockets[i]->hasDataToSend()) {
+                pfd.events |= POLLOUT;  // Ajouter la surveillance d'écriture si des données doivent être envoyées
+            }
+
+            pollfds.push_back(pfd);
+        }
+
+        // Exécuter poll() pour surveiller les événements sur les sockets
+        int ret = poll(&pollfds[0], pollfds.size(), -1);
+        if (ret < 0) {
+            perror("poll");
+            break;
+        }
+
+        size_t index = 0;
+        // Gérer les sockets d'écoute
+        for (; index < listeningSockets.size(); ++index) {
+            if (pollfds[index].revents & POLLIN) {
+                ListeningSocket* listeningSocket = listeningSockets[index];
+                int new_fd = listeningSocket->acceptConnection();
+                if (new_fd >= 0) {
+                    // Créer un DataSocket
+                    DataSocket* newDataSocket = new DataSocket(new_fd, listeningSocket->getAssociatedServers(), *config_);
+                    dataHandler_.addClientSocket(newDataSocket);
+                }
+            }
+        }
+
+        // Gérer les sockets de données (lecture et écriture)
+        for (size_t dataIndex = 0; index < pollfds.size(); ++index, ++dataIndex) {
+            DataSocket* dataSocket = dataSockets[dataIndex];
+
+            // Gérer les événements de lecture (POLLIN)
+            if (pollfds[index].revents & POLLIN) {
+                if (!dataSocket->receiveData()) {
+                    dataSocket->closeSocket();
+                } else if (dataSocket->isRequestComplete()) {
+                    dataSocket->processRequest();
+                }
+            }
+
+            // Gérer les événements d'écriture (POLLOUT)
+            if (pollfds[index].revents & POLLOUT) {
+                if (!dataSocket->sendData()) {
+                    dataSocket->closeSocket();
+                }
+            }
+
+            // Si la socket a été fermée, gérer la suppression
+            if (pollfds[index].revents & (POLLHUP | POLLERR | POLLNVAL)) {
+                dataSocket->closeSocket();
+            }
+        }
+
+        // Nettoyer les sockets fermées
+        dataHandler_.removeClosedSockets();
+    }
+}
+
+
+
+// Nettoie les ressources et ferme les sockets
+void WebServer::cleanUp() {
+    // Ferme les sockets et nettoie les ressources
+    listeningHandler_.cleanUp();
+    dataHandler_.cleanUp();
+
+    // std::cout << "WebServer::cleanUp  : Serveur arrêté proprement." << std::endl;//test
+}

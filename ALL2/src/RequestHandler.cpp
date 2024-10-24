@@ -77,8 +77,8 @@ const Location* RequestHandler::selectLocation(const Server* server, const HttpR
         }
     }
     
-    // if(matchedLocation)
-        // std::cout << matchedLocation->getPath() << std::endl;//test
+    if(matchedLocation)
+        std::cout << "request Path :"<< request.getPath() <<" Matched location :" <<matchedLocation->getPath() << std::endl;//test
     return matchedLocation;
 }
 
@@ -116,7 +116,7 @@ HttpResponse RequestHandler::process(const Server* server, const Location* locat
         return response;
     }
 
-    std::cout <<RED <<  location->getCgiExtension() << location->getCGIEnable() << RESET << std::endl;//test
+    // std::cout <<RED <<  location->getCgiExtension() << location->getCGIEnable() << RESET << std::endl;//test
     //si le fichier est un cgi, le traiter comme tel
     if (location && location->getCgiExtension() != "" && location->getCGIEnable() && endsWith(request.getPath(), location->getCgiExtension()))
     {
@@ -152,7 +152,8 @@ HttpResponse RequestHandler::serveStaticFile(const Server* server, const Locatio
     std::string requestPath = request.getPath();
     if (requestPath[requestPath.size() - 1] == '/')
     {
-        std::cout<< GREEN <<"'" <<location->getIndexIsSet() << "'" << location->getAutoIndex()<< RESET << std::endl;//test
+        if (location)//debug 
+            std::cout<< GREEN <<"location path: "<< location->getPath() <<"'" <<location->getIndexIsSet() << "'" << location->getAutoIndex()<< RESET << std::endl;//test
         if (location && !location->getIndexIsSet() && location->getAutoIndex())
             return(generateAutoIndex(root + requestPath, requestPath));
         requestPath += index;

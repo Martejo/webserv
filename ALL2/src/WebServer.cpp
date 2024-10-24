@@ -50,7 +50,8 @@ void WebServer::start() {
 }
 
 void WebServer::runEventLoop() {
-    std::cout << "WebServer::runEventLoop() : Début de la boucle d'événements." << std::endl;//test
+    std::cout << "WebServer::runEventLoop() : Début de la boucle d'événements." << std::endl;
+
     while (true) {
         std::vector<pollfd> pollfds;
 
@@ -59,33 +60,30 @@ void WebServer::runEventLoop() {
         for (size_t i = 0; i < listeningSockets.size(); ++i) {
             pollfd pfd;
             pfd.fd = listeningSockets[i]->getSocket();
-            pfd.events = POLLIN;
-            pfd.revents = 0;
+            pfd.events = POLLIN;  // Surveiller uniquement les événements de lecture pour accepter les connexions
             pollfds.push_back(pfd);
-            // std::cout << "WebServer::start   : Ajout de ListeningSocket fd " << pfd.fd << " à pollfd." << std::endl;//test
         }
 
-        // Ajouter les pollfd pour les sockets de données
+        // Ajouter les pollfd pour les sockets de données (lecture et écriture)
         const std::vector<DataSocket*>& dataSockets = dataHandler_.getClientSockets();
         for (size_t i = 0; i < dataSockets.size(); ++i) {
             pollfd pfd;
             pfd.fd = dataSockets[i]->getSocket();
-            pfd.events = POLLIN;
-            pfd.revents = 0;
+            pfd.events = POLLIN;  // Par défaut, surveiller la lecture
+
+            if (dataSockets[i]->hasDataToSend()) {
+                pfd.events |= POLLOUT;  // Ajouter la surveillance d'écriture si des données doivent être envoyées
+            }
+
             pollfds.push_back(pfd);
-            // std::cout << "WebServer::runEventLoop   : Ajout de DataSocket fd " << pfd.fd << " à pollfd." << std::endl;//test
         }
 
-        // std::cout << "WebServer::runEventLoop   : Nombre total de pollfds : " << pollfds.size() << std::endl; //test
-
+        // Exécuter poll() pour surveiller les événements sur les sockets
         int ret = poll(&pollfds[0], pollfds.size(), -1);
         if (ret < 0) {
-            // Gérer l'erreur
             perror("poll");
             break;
         }
-
-        // std::cout << "WebServer::runEventLoop   : poll() terminé avec succès." << std::endl;//test
 
         size_t index = 0;
         // Gérer les sockets d'écoute
@@ -97,30 +95,42 @@ void WebServer::runEventLoop() {
                     // Créer un DataSocket
                     DataSocket* newDataSocket = new DataSocket(new_fd, listeningSocket->getAssociatedServers(), *config_);
                     dataHandler_.addClientSocket(newDataSocket);
-                    // std::cout << "WebServer::runEventLoop  : Nouvelle connexion acceptée sur fd " << new_fd << "." << std::endl; //test
                 }
             }
         }
 
-        // Gérer les sockets de données
+        // Gérer les sockets de données (lecture et écriture)
         for (size_t dataIndex = 0; index < pollfds.size(); ++index, ++dataIndex) {
+            DataSocket* dataSocket = dataSockets[dataIndex];
+
+            // Gérer les événements de lecture (POLLIN)
             if (pollfds[index].revents & POLLIN) {
-                DataSocket* dataSocket = dataSockets[dataIndex];
                 if (!dataSocket->receiveData()) {
-                    // std::cout << "WebServer::runEventLoop  : Fermeture de la connexion fd " << dataSocket->getSocket() << "." << std::endl;//test
                     dataSocket->closeSocket();
                 } else if (dataSocket->isRequestComplete()) {
-                    // std::cout << "WebServer::runEventLoop  : Requête complète reçue sur fd " << dataSocket->getSocket() << "." << std::endl;//test
                     dataSocket->processRequest();
+                }
+            }
+
+            // Gérer les événements d'écriture (POLLOUT)
+            if (pollfds[index].revents & POLLOUT) {
+                if (!dataSocket->sendData()) {
                     dataSocket->closeSocket();
                 }
             }
+
+            // Si la socket a été fermée, gérer la suppression
+            if (pollfds[index].revents & (POLLHUP | POLLERR | POLLNVAL)) {
+                dataSocket->closeSocket();
+            }
         }
 
-        // Nettoyer les sockets fermés
+        // Nettoyer les sockets fermées
         dataHandler_.removeClosedSockets();
     }
 }
+
+
 
 // Nettoie les ressources et ferme les sockets
 void WebServer::cleanUp() {

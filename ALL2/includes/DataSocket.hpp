@@ -1,4 +1,3 @@
-// DataSocket.hpp
 #ifndef DATASOCKET_HPP
 #define DATASOCKET_HPP
 
@@ -6,6 +5,7 @@
 #include "HttpResponse.hpp"
 #include "Config.hpp"
 #include <vector>
+#include <string>
 
 class Server;
 
@@ -24,7 +24,13 @@ public:
     void processRequest();
 
     // Envoie la réponse au client
-    void sendResponse(const HttpResponse& response);
+    bool sendData();  // Modification ici pour gérer les envois non bloquants
+
+    // Vérifie s'il y a des données à envoyer
+    bool hasDataToSend() const;
+
+    // Nettoie le tampon d'envoi une fois toutes les données envoyées
+    void clearSendBuffer();
 
     // Ferme la socket
     void closeSocket();
@@ -40,6 +46,10 @@ private:
     bool requestComplete_;
 
     const Config& config_;
+
+    // Nouveau : tampon pour stocker les données à envoyer
+    std::string sendBuffer_;  // Stocke les données à envoyer
+    size_t sendBufferOffset_; // Gère l'avancement dans le tampon
 };
 
 #endif // DATASOCKET_HPP
