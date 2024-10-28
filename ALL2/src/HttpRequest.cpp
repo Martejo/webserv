@@ -28,43 +28,38 @@ bool HttpRequest::isComplete() const {
 }
 
 bool HttpRequest::parseRequest() {
-    // std::cout << "HttpRequest::parseRequest" << std::endl; //test
-
     std::istringstream stream(rawData);
     std::string line;
 
     while (state_ != COMPLETE && std::getline(stream, line)) {
         if (state_ == REQUEST_LINE) {
             if (line.empty()) {
-                std::cout << "HttpRequest::parseRequest()  : Empty request line. Waiting for more data." << std::endl;//test
                 return false; // Attendre plus de données
             }
             parseRequestLine(line);
             state_ = HEADERS;
-        }
-        else if (state_ == HEADERS) {
+        } else if (state_ == HEADERS) {
             if (line == "\r" || line.empty()) {
                 headersParsed = true;
-                // Déterminer la longueur du corps
+
+                // Remplacer auto et std::stoul par une conversion avec stringstream
                 std::map<std::string, std::string>::iterator it = headers.find("Content-Length");
                 if (it != headers.end()) {
-                    contentLength = static_cast<size_t>(atoi(it->second.c_str()));
+                    std::istringstream lengthStream(it->second);
+                    size_t length;
+                    if (!(lengthStream >> length)) {
+                        length = 0;  // Valeur par défaut si la conversion échoue
+                    }
+                    contentLength = length;
                 } else {
                     contentLength = 0;
                 }
 
-                if (contentLength > 0) {
-                    state_ = BODY;
-                } else {
-                    state_ = COMPLETE;
-                }
-            }
-            else {
+                state_ = (contentLength > 0) ? BODY : COMPLETE;
+            } else {
                 parseHeaderLine(line);
             }
-        }
-        else if (state_ == BODY) {
-            // Calculer le nombre de caractères déjà lus dans le corps
+        } else if (state_ == BODY) {
             size_t bodyStartPos = rawData.find("\r\n\r\n");
             if (bodyStartPos != std::string::npos) {
                 bodyStartPos += 4; // Passer les "\r\n\r\n"
@@ -72,17 +67,13 @@ bool HttpRequest::parseRequest() {
                 if (body.size() >= contentLength) {
                     state_ = COMPLETE;
                 } else {
-                    std::cout << "HttpRequest::parseRequest()  : Body not complete yet. Received " << body.size() << " bytes, expecting " << contentLength << " bytes." << std::endl; //test
                     return false; // Attendre plus de données
                 }
-            }
-            else {
-                std::cout << "HttpRequest::parseRequest()  : End of headers not found while parsing body. Waiting for more data." << std::endl; //test
+            } else {
                 return false; // Attendre plus de données
             }
         }
     }
-    std::cout << "HttpRequest::parseRequest()  : request is complete"<< std::endl; //test
     return state_ == COMPLETE;
 }
 
@@ -158,4 +149,16 @@ void HttpRequest::displayContent() const
     std::cout << RED <<"HttpVersion : " << httpVersion << RESET << std::endl;
     // std::cout << RED <<"Headers" << RESET << std::endl;
     std::cout << RED <<"Body : " << body << RESET << std::endl;
+}
+
+void HttpRequest::reset() {
+    method.clear();
+    path.clear();
+    httpVersion.clear();
+    body.clear();
+    rawData.clear();
+    contentLength = 0;
+    headersParsed = false;
+    state_ = REQUEST_LINE;
+    headers.clear();
 }

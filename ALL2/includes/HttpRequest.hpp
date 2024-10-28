@@ -13,6 +13,7 @@ class HttpRequest {
         void appendData(const std::string& data);
         bool isComplete() const;
         bool parseRequest(); // Retourne true si la requête est complète
+        void reset();
 
         // Accesseurs
         const std::string& getMethod() const;

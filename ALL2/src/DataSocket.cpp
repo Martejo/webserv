@@ -16,7 +16,7 @@ DataSocket::~DataSocket() {
 
 bool DataSocket::receiveData() {
     std::cout << CYAN << "DataSocket::receiveData" << RESET << std::endl;
-    char buffer[30];
+    char buffer[4096];
     ssize_t bytesRead = recv(client_fd_, buffer, sizeof(buffer), 0);
 
     if (bytesRead > 0) {
@@ -52,13 +52,14 @@ bool DataSocket::isRequestComplete() const {
 }
 
 void DataSocket::processRequest() {
-    // Créer une instance de RequestHandler pour traiter la requête HTTP
     RequestHandler handler(config_, associatedServers_);
     HttpResponse response = handler.handleRequest(httpRequest_);
-
-    // Générer la réponse à envoyer au client
     sendBuffer_ = response.generateResponse();
-    sendBufferOffset_ = 0;  // Réinitialiser l'offset pour commencer l'envoi depuis le début
+    sendBufferOffset_ = 0;
+
+    // Réinitialiser la requête pour préparer la suivante
+    httpRequest_.reset();
+    requestComplete_ = false;
 }
 
 bool DataSocket::sendData() {
