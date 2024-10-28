@@ -1,265 +1,4 @@
-#include "../includes/DataSocket.hpp"
-#include "../includes/RequestHandler.hpp"
-#include "../includes/Color_Macros.hpp"
-#include <unistd.h>
-#include <cstring>
-#include <iostream>
-#include <algorithm>
-
-DataSocket::DataSocket(int fd, const std::vector<Server*>& servers, const Config& config)
-    : client_fd_(fd), associatedServers_(servers), requestComplete_(false), config_(config), sendBufferOffset_(0) {
-}
-
-DataSocket::~DataSocket() {
-    closeSocket();
-}
-
-bool DataSocket::receiveData() {
-    char buffer[4096];
-    ssize_t bytesRead = recv(client_fd_, buffer, sizeof(buffer), 0);
-
-    if (bytesRead > 0) {
-        // Convertir les données reçues en chaîne de caractères
-        std::string data(buffer, bytesRead);
-        std::cout << BLUE << "REQUETE RECUE DataSocket::receiveData(): \n" << data << std::endl; //test
-        std::cout << "Received " << bytesRead << " bytes." << std::endl;
-
-        // Ajouter les données au buffer de la requête
-        httpRequest_.appendData(data);
-
-        // Essayer de parser la requête, vérifier si elle est complète
-        if (httpRequest_.parseRequest()) {
-            requestComplete_ = httpRequest_.isComplete();
-            if (requestComplete_) {
-                std::cout << "Requête complète reçue." << std::endl; //test
-            }
-        }
-        return true;
-    } else if (bytesRead == 0) {
-        // Le client a fermé la connexion
-        std::cout << "Client closed the connection." << std::endl;
-        return false;
-    } else {
-        // Si `recv()` retourne une erreur (< 0), fermer la connexion
-        std::cerr << "Error receiving data. Closing connection." << std::endl;
-        return false;
-    }
-}
-
-bool DataSocket::isRequestComplete() const {
-    return requestComplete_;
-}
-
-void DataSocket::processRequest() {
-    // Créer une instance de RequestHandler pour traiter la requête HTTP
-    RequestHandler handler(config_, associatedServers_);
-    HttpResponse response = handler.handleRequest(httpRequest_);
-
-    // Générer la réponse à envoyer au client
-    sendBuffer_ = response.generateResponse();
-    sendBufferOffset_ = 0;  // Réinitialiser l'offset pour commencer l'envoi depuis le début
-}
-
-bool DataSocket::sendData() {
-    if (sendBuffer_.empty()) {
-        return true;  // Rien à envoyer
-    }
-
-    // Envoyer les données présentes dans le buffer d'envoi, en gérant les envois partiels
-    ssize_t bytesSent = send(client_fd_, sendBuffer_.c_str() + sendBufferOffset_, sendBuffer_.size() - sendBufferOffset_, 0);
-    
-    if (bytesSent > 0) {
-        sendBufferOffset_ += bytesSent;
-
-        // Si tout a été envoyé, vider le tampon
-        if (sendBufferOffset_ >= sendBuffer_.size()) {
-            clearSendBuffer();
-            return true;  // Envoi terminé avec succès
-        }
-    } else if (bytesSent == 0) {
-        // Si le client a fermé la connexion, retourner faux pour fermer la socket
-        std::cout << "Client closed the connection during send." << std::endl;
-        return false;
-    } else {
-        // Si `send()` retourne une erreur (< 0), fermer la connexion
-        std::cerr << "Error sending data. Closing connection." << std::endl;
-        return false;
-    }
-
-    return true;  // Retourner vrai pour continuer l'envoi lors du prochain appel à poll/select
-}
-
-bool DataSocket::hasDataToSend() const {
-    return !sendBuffer_.empty();
-}
-
-void DataSocket::clearSendBuffer() {
-    sendBuffer_.clear();
-    sendBufferOffset_ = 0;
-}
-
-void DataSocket::closeSocket() {
-    if (client_fd_ != -1) {
-        close(client_fd_);
-        client_fd_ = -1;
-        std::cout << "DataSocket::closeSocket : Socket closed." << std::endl; //test
-    }
-}
-
-int DataSocket::getSocket() const {
-    return client_fd_;
-}
-// HttpRequest.cpp
-#include "../includes/HttpRequest.hpp"
-#include "../includes/Color_Macros.hpp"
-#include <sstream>
-#include <algorithm>
-#include <cctype>
-#include <iostream>
-
-HttpRequest::HttpRequest()
-    : method(""), path(""), httpVersion(""), body(""), contentLength(0), headersParsed(false), state_(REQUEST_LINE) {
-}
-
-HttpRequest::~HttpRequest() {
-}
-
-void HttpRequest::appendData(const std::string& data) {
-    rawData += data;
-}
-
-bool HttpRequest::isComplete() const {
-    if (!headersParsed) {
-        // std::cout << "HttpRequest::isComplete()  : headers are not parsed " << std::endl;//test
-        return false;
-    }
-    // std::cout << "HttpRequest::isComplete()  : body size: " << body.size() << " / " << contentLength << std::endl;//test
-
-    return body.size() >= contentLength;
-}
-
-bool HttpRequest::parseRequest() {
-    // std::cout << "HttpRequest::parseRequest" << std::endl; //test
-
-    std::istringstream stream(rawData);
-    std::string line;
-
-    while (state_ != COMPLETE && std::getline(stream, line)) {
-        if (state_ == REQUEST_LINE) {
-            if (line.empty()) {
-                std::cout << "HttpRequest::parseRequest()  : Empty request line. Waiting for more data." << std::endl;//test
-                return false; // Attendre plus de données
-            }
-            parseRequestLine(line);
-            state_ = HEADERS;
-        }
-        else if (state_ == HEADERS) {
-            if (line == "\r" || line.empty()) {
-                headersParsed = true;
-                // Déterminer la longueur du corps
-                std::map<std::string, std::string>::iterator it = headers.find("Content-Length");
-                if (it != headers.end()) {
-                    contentLength = static_cast<size_t>(atoi(it->second.c_str()));
-                } else {
-                    contentLength = 0;
-                }
-
-                if (contentLength > 0) {
-                    state_ = BODY;
-                } else {
-                    state_ = COMPLETE;
-                }
-            }
-            else {
-                parseHeaderLine(line);
-            }
-        }
-        else if (state_ == BODY) {
-            // Calculer le nombre de caractères déjà lus dans le corps
-            size_t bodyStartPos = rawData.find("\r\n\r\n");
-            if (bodyStartPos != std::string::npos) {
-                bodyStartPos += 4; // Passer les "\r\n\r\n"
-                body = rawData.substr(bodyStartPos, contentLength);
-                if (body.size() >= contentLength) {
-                    state_ = COMPLETE;
-                } else {
-                    std::cout << "HttpRequest::parseRequest()  : Body not complete yet. Received " << body.size() << " bytes, expecting " << contentLength << " bytes." << std::endl; //test
-                    return false; // Attendre plus de données
-                }
-            }
-            else {
-                std::cout << "HttpRequest::parseRequest()  : End of headers not found while parsing body. Waiting for more data." << std::endl; //test
-                return false; // Attendre plus de données
-            }
-        }
-    }
-    std::cout << "HttpRequest::parseRequest()  : request is complete"<< std::endl; //test
-    return state_ == COMPLETE;
-}
-
-void HttpRequest::parseRequestLine(const std::string& line) {
-    std::istringstream lineStream(line);
-    lineStream >> method >> path >> httpVersion;
-
-    // Supprimer le retour chariot de httpVersion s'il est présent
-    if (!httpVersion.empty() && httpVersion[httpVersion.size() - 1] == '\r') {
-        httpVersion.erase(httpVersion.size() - 1);
-    }
-
-    // std::cout << "HttpRequest::parseRequestLine  : Parsed request line: " << method << " " << path << " " << httpVersion << std::endl;//test
-}
-
-void HttpRequest::parseHeaderLine(const std::string& line) {
-    std::string::size_type pos = line.find(':');
-    if (pos != std::string::npos) {
-        std::string headerName = line.substr(0, pos);
-        std::string headerValue = line.substr(pos + 1);
-
-        // Supprimer les espaces
-        headerName.erase(headerName.find_last_not_of(" \t\r\n") + 1);
-        headerValue.erase(0, headerValue.find_first_not_of(" \t\r\n"));
-        headerValue.erase(headerValue.find_last_not_of(" \t\r\n") + 1);
-
-        headers[headerName] = headerValue;
-
-        // std::cout << "HttpRequest::parseRequestLine  : Parsed header: " << headerName << " = '" << headerValue << "'"  << std::endl;//test
-    }
-}
-
-const std::string& HttpRequest::getMethod() const {
-    return method;
-}
-
-const std::string& HttpRequest::getPath() const {
-    return path;
-}
-
-const std::string& HttpRequest::getHttpVersion() const {
-    return httpVersion;
-}
-
-std::string HttpRequest::getHeader(const std::string& headerName) const {
-    std::map<std::string, std::string>::const_iterator it = headers.find(headerName);
-    if (it != headers.end()) {
-        return it->second;
-    }
-    return "";
-}
-
-const std::string& HttpRequest::getBody() const {
-    return body;
-}
-
-std::string HttpRequest::getQueryString() const {
-    // Chercher le point d'interrogation dans l'URL pour trouver la partie de la chaîne de requête
-    std::string::size_type pos = path.find('?');
-    if (pos != std::string::npos && pos + 1 < path.size()) {
-        // Retourner tout ce qui se trouve après le "?"
-        return path.substr(pos + 1);
-    }
-    // Si aucun paramètre n'existe, retourner une chaîne vide
-    return "";
-}#include "../includes/WebServer.hpp"
+#include "../includes/WebServer.hpp"
 #include "../includes/ConfigParser.hpp"
 #include "../includes/ListeningSocket.hpp"
 #include "../includes/DataSocket.hpp"
@@ -369,6 +108,7 @@ void WebServer::runEventLoop() {
                 if (!dataSocket->receiveData()) {
                     dataSocket->closeSocket();
                 } else if (dataSocket->isRequestComplete()) {
+
                     dataSocket->processRequest();
                 }
             }
@@ -400,4 +140,727 @@ void WebServer::cleanUp() {
     dataHandler_.cleanUp();
 
     // std::cout << "WebServer::cleanUp  : Serveur arrêté proprement." << std::endl;//test
+}
+#include "../includes/DataSocket.hpp"
+#include "../includes/RequestHandler.hpp"
+#include "../includes/Color_Macros.hpp"
+#include <unistd.h>
+#include <cstring>
+#include <iostream>
+#include <algorithm>
+
+DataSocket::DataSocket(int fd, const std::vector<Server*>& servers, const Config& config)
+    : client_fd_(fd), associatedServers_(servers), requestComplete_(false), config_(config), sendBufferOffset_(0) {
+}
+
+DataSocket::~DataSocket() {
+    closeSocket();
+}
+
+bool DataSocket::receiveData() {
+    std::cout << CYAN << "DataSocket::receiveData" << RESET << std::endl;
+    char buffer[4096];
+    ssize_t bytesRead = recv(client_fd_, buffer, sizeof(buffer), 0);
+
+    if (bytesRead > 0) {
+        // Convertir les données reçues en chaîne de caractères
+        std::string data(buffer, bytesRead);
+        std::cout << BLUE << "REQUETE RECUE DataSocket::receiveData(): \n" << data << std::endl; //test
+        std::cout << "Received " << bytesRead << " bytes." << std::endl;
+
+        // Ajouter les données au buffer de la requête
+        httpRequest_.appendData(data);
+
+        // Essayer de parser la requête, vérifier si elle est complète
+        if (httpRequest_.parseRequest()) {
+            requestComplete_ = httpRequest_.isComplete();
+            if (requestComplete_) {
+                std::cout << "Requête complète reçue." << std::endl; //test
+            }
+        }
+        return true;
+    } else if (bytesRead == 0) {
+        // Le client a fermé la connexion
+        std::cout << "Client closed the connection." << std::endl;
+        return false;
+    } else {
+        // Si `recv()` retourne une erreur (< 0), fermer la connexion
+        std::cerr << "Error receiving data. Closing connection." << std::endl;
+        return false;
+    }
+}
+
+bool DataSocket::isRequestComplete() const {
+    return requestComplete_;
+}
+
+void DataSocket::processRequest() {
+    RequestHandler handler(config_, associatedServers_);
+    HttpResponse response = handler.handleRequest(httpRequest_);
+    sendBuffer_ = response.generateResponse();
+    sendBufferOffset_ = 0;
+
+    // Réinitialiser la requête pour préparer la suivante
+    httpRequest_.reset();
+    requestComplete_ = false;
+}
+
+bool DataSocket::sendData() {
+    if (sendBuffer_.empty()) {
+        return true;  // Rien à envoyer
+    }
+
+    // Envoyer les données présentes dans le buffer d'envoi, en gérant les envois partiels
+    ssize_t bytesSent = send(client_fd_, sendBuffer_.c_str() + sendBufferOffset_, sendBuffer_.size() - sendBufferOffset_, 0);
+    
+    if (bytesSent > 0) {
+        sendBufferOffset_ += bytesSent;
+
+        // Si tout a été envoyé, vider le tampon
+        if (sendBufferOffset_ >= sendBuffer_.size()) {
+            clearSendBuffer();
+            return true;  // Envoi terminé avec succès
+        }
+    } else if (bytesSent == 0) {
+        // Si le client a fermé la connexion, retourner faux pour fermer la socket
+        std::cout << "Client closed the connection during send." << std::endl;
+        return false;
+    } else {
+        // Si `send()` retourne une erreur (< 0), fermer la connexion
+        std::cerr << "Error sending data. Closing connection." << std::endl;
+        return false;
+    }
+
+    return true;  // Retourner vrai pour continuer l'envoi lors du prochain appel à poll/select
+}
+
+bool DataSocket::hasDataToSend() const {
+    return !sendBuffer_.empty();
+}
+
+void DataSocket::clearSendBuffer() {
+    sendBuffer_.clear();
+    sendBufferOffset_ = 0;
+}
+
+void DataSocket::closeSocket() {
+    if (client_fd_ != -1) {
+        close(client_fd_);
+        client_fd_ = -1;
+        std::cout << "DataSocket::closeSocket : Socket closed." << std::endl; //test
+    }
+}
+
+int DataSocket::getSocket() const {
+    return client_fd_;
+}
+
+std::vector<Server *> DataSocket::getAssociatedServers() const 
+{
+    return associatedServers_;
+}// RequestHandler.cpp
+#include "RequestHandler.hpp"
+#include <algorithm>
+#include <sys/stat.h>
+#include <dirent.h>
+#include <unistd.h>
+#include <fstream>
+#include <sstream>
+#include <iostream>
+#include <limits.h>
+#include "../includes/Utils.hpp"
+#include "../includes/Color_Macros.hpp"
+
+
+RequestHandler::RequestHandler(const Config& config, const std::vector<Server*>& associatedServers)
+    : config_(config), associatedServers_(associatedServers)
+{
+}
+
+RequestHandler::~RequestHandler() {}
+
+HttpResponse RequestHandler::handleRequest(const HttpRequest& request) {
+    std::cout << GREEN<< "RequestHandler::handleRequest" << RESET << std::endl;   //test
+    request.displayContent();
+    // Sélectionner le serveur approprié
+    const Server* server = selectServer(request);
+    if (!server) {
+        // Aucun serveur trouvé, renvoyer une erreur 500
+        return handleError(500, NULL);
+    }
+
+    // Sélectionner la meilleure location
+    const Location* location = selectLocation(server, request);
+    
+    // Traiter la requête et générer la réponse
+    return process(server, location, request);
+}
+
+const Server* RequestHandler::selectServer(const HttpRequest& request) const {
+    std::string hostHeader = request.getHeader("Host");
+    if (hostHeader.empty()) {
+        std::cerr << "No Host header found in the request." << std::endl;
+        return NULL;
+    }
+
+    // Parcourir tous les serveurs pour trouver une correspondance
+    for (size_t i = 0; i < associatedServers_.size(); ++i) {
+        const std::vector<std::string>& serverNames = associatedServers_[i]->getServerNames();
+        if (std::find(serverNames.begin(), serverNames.end(), hostHeader) != serverNames.end()) {
+            std::cerr << "RequestHandler::selectServer   : Server finded by name => first name of server : " << associatedServers_[i]->getServerNames()[0] << " ip:port : "<< associatedServers_[i]->getHost() << ":"<< associatedServers_[i]->getPort() << std::endl; //test
+            return associatedServers_[i];
+        }
+    }
+
+    // Si aucun serveur ne correspond, utiliser le premier serveur comme défaut
+    if (!associatedServers_.empty()) {
+        std::cerr << "RequestHandler::selectServer   : Default server Used => first name of server : " << associatedServers_[0]->getServerNames()[0] << " ip:port : "<< associatedServers_[0]->getHost() << ":"<< associatedServers_[0]->getPort() << std::endl;//test
+        
+        return associatedServers_[0];
+    }
+    
+    std::cerr << "RequestHandler::selectServer   : No server finded == PROBLEM because default must exist"<< std::endl;//test
+    // Aucun serveur configuré
+    return NULL;
+}
+
+const Location* RequestHandler::selectLocation(const Server* server, const HttpRequest& request) const {
+    std::string requestPath = request.getPath();
+    const std::vector<Location>& locations = server->getLocations();
+
+    const Location* matchedLocation = NULL;
+    size_t longestMatch = 0;
+
+    for (size_t i = 0; i < locations.size(); ++i) {
+        std::string locPath = locations[i].getPath();
+        if (requestPath.find(locPath) == 0 && locPath.length() > longestMatch) {
+            matchedLocation = &locations[i];
+            longestMatch = locPath.length();
+        }
+    }
+    
+    if(matchedLocation)
+        std::cout << "request Path :"<< request.getPath() <<" Matched location :" <<matchedLocation->getPath() << std::endl;//test
+    return matchedLocation;
+}
+
+HttpResponse RequestHandler::process(const Server* server, const Location* location, const HttpRequest& request) const 
+{
+    HttpResponse response;
+
+    // Vérifier les méthodes HTTP autorisées
+    if (location) {
+        const std::vector<std::string>& allowedMethods = location->getAllowedMethods();
+        if (!allowedMethods.empty()) {
+            if (std::find(allowedMethods.begin(), allowedMethods.end(), request.getMethod()) == allowedMethods.end()) {
+                // Méthode non autorisée
+                response.setStatusCode(405); // Method Not Allowed
+                response.setBody("Method Not Allowed");
+                // Ajouter l'en-tête Allow avec les méthodes autorisées
+                std::string allowHeader = "Allow: ";
+                for (size_t m = 0; m < allowedMethods.size(); ++m) {
+                    allowHeader += allowedMethods[m];
+                    if (m < allowedMethods.size() - 1)
+                        allowHeader += ", ";
+                }
+                response.setHeader("Allow", allowHeader);
+                return response;
+            }
+        }
+    }
+
+    // Gérer les redirections si spécifiées
+    if (location && !location->getRedirection().empty()) {
+        std::string redirectionUrl = location->getRedirection();
+        response.setStatusCode(301); // Moved Permanently
+        response.setHeader("Location", redirectionUrl);
+        response.setBody("Redirecting to " + redirectionUrl);
+        return response;
+    }
+
+    // std::cout <<RED <<  location->getCgiExtension() << location->getCGIEnable() << RESET << std::endl;//test
+    //si le fichier est un cgi, le traiter comme tel
+    if (location && location->getCgiExtension() != "" && location->getCGIEnable() && endsWith(request.getPath(), location->getCgiExtension()))
+    {
+        return serveFileWithCGI(server, location, request);
+    }
+    // Si la méthode est GET, simplement servir le fichier HTML
+    else if (request.getMethod() == "GET") {
+        return serveStaticFile(server, location, request); // Fonction servant les fichiers statiques (comme upload.html)
+    }
+    // Traiter les uploads si la méthode est POST et si l'upload est activé
+    else if (request.getMethod() == "POST" && location && location->getUploadEnable()) {
+        return handleFileUpload(request, location);
+    }
+
+    // Traiter les autres méthodes ou renvoyer une réponse par défaut
+    return handleError(400, server); // Bad Request par défaut pour les autres types de requêtes
+}
+
+HttpResponse RequestHandler::serveStaticFile(const Server* server, const Location* location, const HttpRequest& request) const 
+{
+    HttpResponse response;
+
+    // Déterminer le répertoire racine et le fichier index
+    std::string root = server->getRoot();
+    std::string index = server->getIndex();
+
+    if (location) {
+        root = location->getRoot();
+        index = location->getIndex();
+    }
+
+    // Construire le chemin complet du fichier demandé
+    std::string requestPath = request.getPath();
+    if (requestPath[requestPath.size() - 1] == '/')
+    {
+        if (location)//debug 
+            std::cout<< GREEN <<"location path: "<< location->getPath() <<"'" <<location->getIndexIsSet() << "'" << location->getAutoIndex()<< RESET << std::endl;//test
+        if (location && !location->getIndexIsSet() && location->getAutoIndex())
+            return(generateAutoIndex(root + requestPath, requestPath));
+        requestPath += index;
+    }
+    //retirer la location de requestPath si la directive root est parametree en son sein 
+    if (location && location->getRootIsSet())
+    {
+        std::string to_remove = location->getPath();
+        size_t pos = requestPath.find(to_remove);
+        if (pos != std::string::npos) {
+            requestPath.erase(pos, to_remove.length());
+            // std::cout << "Location path removed" << to_remove << std::endl;//test
+
+        }
+    }
+
+    std::string fullPath = root + requestPath;
+    std::cout << "Serving file: " << fullPath << std::endl;
+
+    // Vérifier la sécurité du chemin
+    if (!isPathSecure(root, fullPath)) {
+        return handleError(403, server); // Forbidden
+    }
+
+    // Ouvrir le fichier demandé
+    std::ifstream file(fullPath.c_str(), std::ios::in | std::ios::binary);
+    if (!file.is_open()) {
+        std::cout << "File not found: " << fullPath << std::endl;
+        return handleError(404, server); // File Not Found
+    }
+
+    // Lire le contenu du fichier
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    std::string fileContent = buffer.str();
+    file.close();
+
+    // Définir les en-têtes et le corps de la réponse
+    response.setStatusCode(200);
+    response.setBody(fileContent);
+
+    // Définir le Content-Type en fonction de l'extension du fichier
+    size_t dotPos = fullPath.find_last_of('.');
+    if (dotPos != std::string::npos) {
+        std::string extension = fullPath.substr(dotPos + 1);
+        std::string contentType = getMimeType(extension);
+        if (!contentType.empty()) {
+            response.setHeader("Content-Type", contentType);
+        }
+    }
+
+    return response;
+}
+
+#include <cstdlib>  // Pour getenv, setenv
+#include <sys/wait.h>  // Pour waitpid
+#include <unistd.h>  // Pour fork, execve
+#include <iostream>
+#include <vector>
+#include <fstream>
+#include <sstream>
+
+// HttpResponse RequestHandler::serveFileWithCGI(const Server* server, const Location* location, const HttpRequest& request) const {
+//     HttpResponse response;
+
+//     // Déterminer le chemin du script CGI et le PATH_INFO
+//     // std::string scriptPath = location->getCgiPath();  // Obtenir le chemin du script CGI à partir de la configuration
+//     std::string scriptPath = "/usr/bin/python3";  // Obtenir le chemin du script CGI à partir de la configuration
+//     std::string pathInfo = request.getPath();         // Obtenir le PATH_INFO de la requête HTTP
+
+//     // Ajouter le PATH_INFO après le script pour lui indiquer le fichier à traiter
+//     std::string scriptFilePath = scriptPath + pathInfo;
+
+//     // Variables d'environnement CGI nécessaires
+//     std::vector<std::string> envVars;
+//     envVars.push_back("GATEWAY_INTERFACE=CGI/1.1");
+//     envVars.push_back("SERVER_PROTOCOL=HTTP/1.1");
+//     envVars.push_back("REQUEST_METHOD=" + request.getMethod());
+//     envVars.push_back("PATH_INFO=" + pathInfo);
+//     envVars.push_back("SCRIPT_FILENAME=" + scriptFilePath);
+//     envVars.push_back("CONTENT_TYPE=" + request.getHeader("Content-Type"));
+//     envVars.push_back("CONTENT_LENGTH=" + request.getHeader("Content-Length"));
+//     envVars.push_back("QUERY_STRING=" + request.getQueryString());
+//     envVars.push_back("REMOTE_ADDR=" + request.getRemoteAddress());
+
+//     // Convertir les variables d'environnement en tableau de char* pour execve
+//     std::vector<char*> envp;
+//     for (size_t i = 0; i < envVars.size(); ++i) {
+//         envp.push_back(const_cast<char*>(envVars[i].c_str()));
+//     }
+//     envp.push_back(NULL);  // Fin du tableau de variables d'environnement
+
+//     // Tableau d'arguments pour execve
+//     char* const argv[] = {const_cast<char*>(scriptPath.c_str()), NULL};
+
+//     // Créer un pipe pour capturer la sortie du CGI
+//     int pipefd[2];
+//     if (pipe(pipefd) == -1) {
+//         return handleError(500, server);  // Erreur interne
+//     }
+
+//     // Fork pour exécuter le processus CGI
+//     pid_t pid = fork();
+//     if (pid == -1) {
+//         return handleError(500, server);  // Erreur interne
+//     } else if (pid == 0) {
+//         // Processus enfant - exécution du script CGI
+//         close(pipefd[0]);  // Fermer la lecture dans le pipe
+
+//         // Rediriger stdout vers l'écriture dans le pipe
+//         dup2(pipefd[1], STDOUT_FILENO);
+//         close(pipefd[1]);
+
+//         // Exécuter le script CGI avec execve
+//         execve(scriptPath.c_str(), argv, envp.data());
+//         std::cerr << "Failed to execute CGI script: " << scriptPath << std::endl;
+//         _exit(EXIT_FAILURE);  // Sortir en cas d'échec
+//     } else {
+//         // Processus parent - lire la sortie du CGI
+//         close(pipefd[1]);  // Fermer l'écriture dans le pipe
+
+//         // Lire la sortie du processus CGI
+//         std::stringstream cgiOutput;
+//         char buffer[1024];
+//         ssize_t bytesRead;
+//         while ((bytesRead = read(pipefd[0], buffer, sizeof(buffer))) > 0) {
+//             cgiOutput.write(buffer, bytesRead);
+//         }
+//         close(pipefd[0]);
+
+//         // Attendre que le processus CGI se termine
+//         int status;
+//         waitpid(pid, &status, 0);
+
+//         // Vérifier si le CGI a retourné une sortie correcte
+//         if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+//             // Créer la réponse avec la sortie du CGI
+//             response.setStatusCode(200);
+//             response.setBody(cgiOutput.str());
+//             response.setHeader("Content-Type", "text/html");  // Type par défaut, à ajuster selon le script CGI
+//         } else {
+//             return handleError(500, server);  // Erreur interne si le CGI a échoué
+//         }
+//     }
+
+//     return response;
+// }
+
+HttpResponse RequestHandler::serveFileWithCGI(const Server* server, const Location* /* location */, const HttpRequest& request) const {
+    HttpResponse response;
+    std::string scriptPath = "/usr/bin/python3";
+    std::string scriptFilePath = server->getRoot() + request.getPath();
+
+    std::vector<std::string> envVars;
+    envVars.push_back("GATEWAY_INTERFACE=CGI/1.1");
+    envVars.push_back("SERVER_PROTOCOL=HTTP/1.1");
+    envVars.push_back("REQUEST_METHOD=" + request.getMethod());
+    envVars.push_back("SCRIPT_FILENAME=" + scriptFilePath);
+    envVars.push_back("CONTENT_TYPE=" + request.getHeader("Content-Type"));
+    envVars.push_back("CONTENT_LENGTH=" + request.getHeader("Content-Length"));
+    envVars.push_back("QUERY_STRING=" + request.getQueryString());
+
+    CgiProcess cgiProcess(scriptPath, scriptFilePath, envVars);
+    if (!cgiProcess.start()) {
+        return handleError(500, server);
+    }
+
+    // Ajout de `cgiProcess.getPipeFd()` à poll
+    struct pollfd cgiPollFd;  // Utiliser struct pour compatibilité C++98
+    cgiPollFd.fd = cgiProcess.getPipeFd();
+    cgiPollFd.events = POLLIN;  // Utiliser POLLIN sans faute de frappe
+
+    std::stringstream cgiOutput;
+    while (cgiProcess.isRunning()) {
+        int ret = poll(&cgiPollFd, 1, 1000);  // Timeout de 1 seconde
+        if (ret > 0 && (cgiPollFd.revents & POLLIN)) {
+            cgiOutput << cgiProcess.readOutput();
+        } else if (ret < 0) {
+            return handleError(500, server);
+        }
+    }
+
+    response.setStatusCode(200);
+    response.setBody(cgiOutput.str());
+    response.setHeader("Content-Type", "text/html");
+
+    return response;
+}
+
+
+HttpResponse RequestHandler::handleFileUpload(const HttpRequest& request, const Location* location) const {
+    std::cout << RED << "RequestHandler::handleFileUpload" << RESET << std::endl;//test
+    HttpResponse response;
+
+    // Extraire la limite (boundary) de l'en-tête Content-Type
+    std::string contentType = request.getHeader("Content-Type");
+    std::string boundary;
+    std::string boundaryPrefix = "boundary=";
+    std::string::size_type boundaryPos = contentType.find(boundaryPrefix);
+    if (boundaryPos != std::string::npos) {
+        boundary = "--" + contentType.substr(boundaryPos + boundaryPrefix.length());
+    } else {
+        response.setStatusCode(400);
+        response.setBody("No boundary found in multipart request.");
+        return response;
+    }
+
+    // Lire le corps de la requête
+    std::string body = request.getBody();
+
+    // Séparer les différentes parties
+    std::string::size_type start = 0;
+    while ((start = body.find(boundary, start)) != std::string::npos) {
+        start += boundary.length();
+        std::string::size_type end = body.find(boundary, start);
+        if (end == std::string::npos) break;
+
+        std::string part = body.substr(start, end - start);
+
+        // Extraire les en-têtes de la partie
+        std::string::size_type headerEnd = part.find("\r\n\r\n");
+        if (headerEnd == std::string::npos) continue;
+
+        std::string headers = part.substr(0, headerEnd);
+        std::string fileData = part.substr(headerEnd + 4);
+
+        // Vérifier si cette partie est un fichier
+        std::string filenamePrefix = "filename=\"";
+        std::string::size_type filenamePos = headers.find(filenamePrefix);
+        if (filenamePos != std::string::npos) {
+            std::string::size_type filenameEndPos = headers.find("\"", filenamePos + filenamePrefix.length());
+            if (filenameEndPos != std::string::npos) {
+                std::string filename = headers.substr(filenamePos + filenamePrefix.length(), filenameEndPos - (filenamePos + filenamePrefix.length()));
+
+                // Construire le chemin complet pour sauvegarder le fichier
+                std::string uploadDirectory = location->getUploadStore();  // Obtenir le répertoire d'upload depuis la configuration
+                std::string fullPath = uploadDirectory + "/" + filename;
+
+                // Sauvegarder le fichier
+                std::ofstream file(fullPath.c_str(), std::ios::binary);
+                if (file.is_open()) {
+                    file.write(fileData.c_str(), fileData.size());
+                    file.close();
+                    std::cout << "File saved: " << fullPath << std::endl;
+                } else {
+                    std::cerr << "Failed to save file: " << fullPath << std::endl;
+                    response.setStatusCode(500);
+                    response.setBody("Failed to save file.");
+                    return response;
+                }
+            }
+        }
+    }
+
+    response.setStatusCode(200);
+    response.setBody("File upload successful.");
+    return response;
+}
+
+HttpResponse RequestHandler::generateAutoIndex(const std::string& fullPath, const std::string& requestPath) const {
+    std::cout << RED << "RequestHandler::generateAutoIndex" << RESET << std::endl; // test
+    std::stringstream ss;
+    
+    // Génération du contenu HTML
+    ss << "<html><head><title>Index of " << requestPath << "</title></head><body>";
+    ss << "<h1>Index of " << requestPath << "</h1><ul>";
+
+    DIR* dir = opendir(fullPath.c_str());
+    if (dir) {
+        struct dirent* entry;
+        while ((entry = readdir(dir)) != NULL) {
+            std::string name = entry->d_name;
+            if (name == ".")
+                continue;
+            ss << "<li><a href=\"" << name << "\">" << name << "</a></li>";
+        }
+        closedir(dir);
+    } else {
+        ss << "<li>Error reading directory.</li>";
+    }
+
+    ss << "</ul></body></html>";
+
+    // Créer la réponse HTTP
+    HttpResponse response;
+    response.setStatusCode(200); // Code d'état 200 OK
+    response.setBody(ss.str()); // Corps de la réponse
+    response.setHeader("Content-Type", "text/html; charset=UTF-8"); // Définir le type de contenu
+
+    return response; // Retourner l'objet HttpResponse
+}
+
+std::string RequestHandler::getMimeType(const std::string& extension) const {
+    if (extension == "html" || extension == "htm")
+        return "text/html";
+    if (extension == "css")
+        return "text/css";
+    if (extension == "js")
+        return "application/javascript";
+    if (extension == "png")
+        return "image/png";
+    if (extension == "jpg" || extension == "jpeg")
+        return "image/jpeg";
+    if (extension == "gif")
+        return "image/gif";
+    if (extension == "txt")
+        return "text/plain";
+    // Ajouter d'autres types MIME selon les besoins
+    return "application/octet-stream"; // Type par défaut
+}
+
+bool RequestHandler::isPathSecure(const std::string& root, const std::string& fullPath) const {
+    char realRoot[PATH_MAX];
+    char realFullPath[PATH_MAX];
+
+    if (realpath(root.c_str(), realRoot) == NULL) {
+        std::cerr << "Invalid root path: " << root << std::endl;
+        return false;
+    }
+
+    if (realpath(fullPath.c_str(), realFullPath) == NULL) {
+        std::cerr << "Invalid file path: " << fullPath << std::endl;
+        return false;
+    }
+
+    std::string realRootStr(realRoot);
+    std::string realFullPathStr(realFullPath);
+
+    // std::cout << "REAL ROOT :" << realRootStr << " realFullPath :" << realFullPath <<std::endl; //test
+
+    // Vérifier que fullPath commence par root
+    if (realFullPathStr.find(realRootStr) != 0) {
+        std::cerr << "Path traversal attempt detected: " << fullPath << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+HttpResponse RequestHandler::handleError(int statusCode, const Server* server) const {
+    HttpResponse response;
+    response.setStatusCode(statusCode);
+
+    // Récupérer la page d'erreur personnalisée si disponible
+    std::string errorPageUri = "";
+    if (server) {
+        errorPageUri = server->getErrorPage(statusCode);
+    } else {
+        // Récupérer depuis la configuration globale si aucun serveur n'est spécifié
+        errorPageUri = config_.getErrorPage(statusCode);
+    }
+
+    if (!errorPageUri.empty()) {
+        // Construire le chemin complet de la page d'erreur
+        std::string errorPagePath = server ? server->getRoot() + errorPageUri : config_.getRoot() + errorPageUri;
+        std::ifstream errorFile(errorPagePath.c_str(), std::ios::in | std::ios::binary);
+        if (errorFile.is_open()) {
+            std::stringstream buffer;
+            buffer << errorFile.rdbuf();
+            std::string errorContent = buffer.str();
+            errorFile.close();
+            response.setBody(errorContent);
+        } else {
+            response.setBody("Error " + ::toString(statusCode));
+        }
+    } else {
+        // Message d'erreur par défaut
+        switch (statusCode) {
+            case 400: response.setBody("Bad Request"); break;
+            case 403: response.setBody("Forbidden"); break;
+            case 404: response.setBody("Not Found"); break;
+            case 500: response.setBody("Internal Server Error"); break;
+            default: response.setBody("Error " + toString(statusCode));
+        }
+    }
+
+    // Définir le Content-Type
+    response.setHeader("Content-Type", "text/html");
+
+    return response;
+}
+// CgiProcess.cpp
+#include "CgiProcess.hpp"
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/wait.h>
+#include <iostream>
+
+CgiProcess::CgiProcess(const std::string& scriptPath, const std::string& scriptFilePath, const std::vector<std::string>& envVars)
+    : pid_(-1), scriptPath_(scriptPath), scriptFilePath_(scriptFilePath) {
+    createEnvp(envVars);
+    pipefd_[0] = pipefd_[1] = -1;
+}
+
+CgiProcess::~CgiProcess() {
+    cleanupEnvp();
+    if (pipefd_[0] != -1) close(pipefd_[0]);
+    if (pipefd_[1] != -1) close(pipefd_[1]);
+    if (pid_ > 0) waitpid(pid_, NULL, WNOHANG);  // Nettoyer le processus enfant s'il est terminé
+}
+
+bool CgiProcess::start() {
+    if (pipe(pipefd_) == -1) return false;
+
+    fcntl(pipefd_[0], F_SETFL, O_NONBLOCK);  // Mode non-bloquant pour la lecture
+
+    pid_ = fork();
+    if (pid_ == -1) return false;
+    if (pid_ == 0) {
+        close(pipefd_[0]);
+        dup2(pipefd_[1], STDOUT_FILENO);
+        close(pipefd_[1]);
+        char* const argv[] = {const_cast<char*>(scriptPath_.c_str()), const_cast<char*>(scriptFilePath_.c_str()), NULL};
+        execve(scriptPath_.c_str(), argv, envp_.data());
+        _exit(1);  // Échec si execve retourne
+    }
+    close(pipefd_[1]);
+    return true;
+}
+
+bool CgiProcess::isRunning() const {
+    int status;
+    return waitpid(pid_, &status, WNOHANG) == 0;
+}
+
+int CgiProcess::getPipeFd() const {
+    return pipefd_[0];
+}
+
+std::string CgiProcess::readOutput() {
+    char buffer[1024];
+    ssize_t bytesRead = read(pipefd_[0], buffer, sizeof(buffer));
+    if (bytesRead > 0) {
+        return std::string(buffer, bytesRead);
+    }
+    return "";
+}
+
+void CgiProcess::createEnvp(const std::vector<std::string>& envVars) {
+    for (size_t i = 0; i < envVars.size(); ++i) {
+        envp_.push_back(const_cast<char*>(envVars[i].c_str()));
+    }
+    envp_.push_back(NULL);
+}
+
+void CgiProcess::cleanupEnvp() {
+    envp_.clear();
 }

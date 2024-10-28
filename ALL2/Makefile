@@ -18,6 +18,7 @@ SRC_FILES 	=	src/main.cpp \
 				src/Config.cpp \
 				src/ConfigParser.cpp \
 				src/Exceptions.cpp \
+				src/CgiProcess.cpp \
 				
 
 
@@ -37,6 +38,7 @@ INC 		=	includes/HttpRequest.hpp \
 				includes/ConfigParser.hpp \
 				includes/Exceptions.hpp \
 				includes/Utils.hpp \
+				includes/CgiProcess.hpp \
 				
 
 %.o   : %.cpp $(INC)

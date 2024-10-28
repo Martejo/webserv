@@ -5,9 +5,11 @@
 #include <string>
 #include <map>
 #include <utility> // Pour std::pair
+#include <poll.h> 
 #include "ListeningSocketHandler.hpp"
 #include "DataSocketHandler.hpp"
 #include "Config.hpp"
+#include "ConfigParser.hpp"
 #include "Color_Macros.hpp"
 
 class WebServer {

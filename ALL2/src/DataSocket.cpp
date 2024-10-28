@@ -1,48 +1,38 @@
-#include "../includes/DataSocket.hpp"
-#include "../includes/RequestHandler.hpp"
-#include "../includes/Color_Macros.hpp"
+// DataSocket.cpp
+#include "DataSocket.hpp"
+#include "RequestHandler.hpp"
+#include "Color_Macros.hpp"
 #include <unistd.h>
-#include <cstring>
 #include <iostream>
-#include <algorithm>
 
 DataSocket::DataSocket(int fd, const std::vector<Server*>& servers, const Config& config)
-    : client_fd_(fd), associatedServers_(servers), requestComplete_(false), config_(config), sendBufferOffset_(0) {
+    : client_fd_(fd), associatedServers_(servers), requestComplete_(false), config_(config),
+      sendBufferOffset_(0), cgiProcess_(NULL), cgiPipeFd_(-1), cgiComplete_(true) {
 }
 
 DataSocket::~DataSocket() {
     closeSocket();
+    if (cgiProcess_) {
+        delete cgiProcess_;
+        cgiProcess_ = NULL;
+    }
 }
 
 bool DataSocket::receiveData() {
-    std::cout << CYAN << "DataSocket::receiveData" << RESET << std::endl;
     char buffer[4096];
     ssize_t bytesRead = recv(client_fd_, buffer, sizeof(buffer), 0);
 
     if (bytesRead > 0) {
-        // Convertir les données reçues en chaîne de caractères
         std::string data(buffer, bytesRead);
-        std::cout << BLUE << "REQUETE RECUE DataSocket::receiveData(): \n" << data << std::endl; //test
-        std::cout << "Received " << bytesRead << " bytes." << std::endl;
-
-        // Ajouter les données au buffer de la requête
         httpRequest_.appendData(data);
 
-        // Essayer de parser la requête, vérifier si elle est complète
         if (httpRequest_.parseRequest()) {
             requestComplete_ = httpRequest_.isComplete();
-            if (requestComplete_) {
-                std::cout << "Requête complète reçue." << std::endl; //test
-            }
         }
         return true;
     } else if (bytesRead == 0) {
-        // Le client a fermé la connexion
-        std::cout << "Client closed the connection." << std::endl;
         return false;
     } else {
-        // Si `recv()` retourne une erreur (< 0), fermer la connexion
-        std::cerr << "Error receiving data. Closing connection." << std::endl;
         return false;
     }
 }
@@ -53,61 +43,109 @@ bool DataSocket::isRequestComplete() const {
 
 void DataSocket::processRequest() {
     RequestHandler handler(config_, associatedServers_);
-    HttpResponse response = handler.handleRequest(httpRequest_);
-    sendBuffer_ = response.generateResponse();
-    sendBufferOffset_ = 0;
+    RequestResult result = handler.handleRequest(httpRequest_);
 
-    // Réinitialiser la requête pour préparer la suivante
+    if (result.responseReady) {
+        sendBuffer_ = result.response.generateResponse();
+        sendBufferOffset_ = 0;
+    } else if (result.cgiProcess) {
+        cgiProcess_ = result.cgiProcess;
+        cgiPipeFd_ = cgiProcess_->getPipeFd();
+        // std::cout << GREEN <<"DataSocket::processRequest result.cgiprocess : " << cgiPipeFd_ << RESET <<std::endl;//test
+        cgiComplete_ = false;
+    } else {
+        sendBuffer_ = result.response.generateResponse();
+        sendBufferOffset_ = 0;
+    }
+
     httpRequest_.reset();
     requestComplete_ = false;
 }
 
 bool DataSocket::sendData() {
+    // std::cout << "DataSocket::sendData" <<std::endl;//test
     if (sendBuffer_.empty()) {
-        return true;  // Rien à envoyer
+        return true;
     }
 
-    // Envoyer les données présentes dans le buffer d'envoi, en gérant les envois partiels
     ssize_t bytesSent = send(client_fd_, sendBuffer_.c_str() + sendBufferOffset_, sendBuffer_.size() - sendBufferOffset_, 0);
-    
+
     if (bytesSent > 0) {
         sendBufferOffset_ += bytesSent;
-
-        // Si tout a été envoyé, vider le tampon
         if (sendBufferOffset_ >= sendBuffer_.size()) {
-            clearSendBuffer();
-            return true;  // Envoi terminé avec succès
+            sendBuffer_.clear();
+            sendBufferOffset_ = 0;
+            return true;
         }
     } else if (bytesSent == 0) {
-        // Si le client a fermé la connexion, retourner faux pour fermer la socket
-        std::cout << "Client closed the connection during send." << std::endl;
         return false;
     } else {
-        // Si `send()` retourne une erreur (< 0), fermer la connexion
-        std::cerr << "Error sending data. Closing connection." << std::endl;
         return false;
     }
 
-    return true;  // Retourner vrai pour continuer l'envoi lors du prochain appel à poll/select
+    return true;
 }
 
 bool DataSocket::hasDataToSend() const {
     return !sendBuffer_.empty();
 }
 
-void DataSocket::clearSendBuffer() {
-    sendBuffer_.clear();
-    sendBufferOffset_ = 0;
-}
-
 void DataSocket::closeSocket() {
     if (client_fd_ != -1) {
         close(client_fd_);
         client_fd_ = -1;
-        std::cout << "DataSocket::closeSocket : Socket closed." << std::endl; //test
+        std::cout << RED <<"DataSocket::closeSocket: Socket closed."<< RESET << std::endl;
     }
 }
 
 int DataSocket::getSocket() const {
     return client_fd_;
+}
+
+// CGI handling methods
+bool DataSocket::hasCgiProcess() const {
+    return cgiProcess_ != NULL;
+}
+
+int DataSocket::getCgiPipeFd() const {
+    return cgiPipeFd_;
+}
+
+bool DataSocket::isCgiComplete() const {
+    return cgiComplete_;
+}
+
+void DataSocket::readFromCgiPipe() {
+    std::cout << "DataSocket::readFromCgiPipe" << std::endl;//test
+    
+    char buffer[1024];
+    ssize_t bytesRead = read(cgiPipeFd_, buffer, sizeof(buffer));
+    if (bytesRead > 0) {
+        cgiOutputBuffer_.append(buffer, bytesRead);
+    } else if (bytesRead == 0) {
+        // EOF reached, CGI process finished
+        closeCgiPipe();
+
+        HttpResponse response;
+        response.setStatusCode(200);
+        response.setBody(cgiOutputBuffer_);
+        response.setHeader("Content-Type", "text/html");
+        sendBuffer_ = response.generateResponse();
+        sendBufferOffset_ = 0;
+    } else {
+        // Error occurred
+        closeCgiPipe();
+    }
+}
+
+void DataSocket::closeCgiPipe() {
+    if (cgiPipeFd_ != -1) {
+        close(cgiPipeFd_);
+        cgiPipeFd_ = -1;
+    }
+    if (cgiProcess_) {
+        delete cgiProcess_;
+        cgiProcess_ = NULL;
+    }
+    cgiComplete_ = true;
 }
