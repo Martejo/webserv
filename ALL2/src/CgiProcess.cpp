@@ -1,5 +1,6 @@
 // CgiProcess.cpp
 #include "CgiProcess.hpp"
+#include "Color_Macros.hpp"
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/wait.h>
@@ -30,8 +31,11 @@ bool CgiProcess::start() {
         close(pipefd_[0]);
         dup2(pipefd_[1], STDOUT_FILENO);
         close(pipefd_[1]);
-        char* const argv[] = {const_cast<char*>(scriptPath_.c_str()), const_cast<char*>(scriptFilePath_.c_str()), NULL};
-        execve(scriptPath_.c_str(), argv, envp_.data());
+        // char* const argv[] = {const_cast<char*>("/usr/bin/python3"), const_cast<char*>(scriptFilePath_.c_str()), NULL};
+        char* const argv[] = {const_cast<char*>("/usr/bin/python3"), const_cast<char*>("/home/hanglade/Desktop/webserv/ALL2/www/cgi-bin/hello.py"), NULL};
+        std::cerr << CYAN << "before execve from child"<< RESET<< std::endl;
+        execve(argv[0], argv, envp_.data());
+        std::cerr << CYAN << "error execve from child"<< RESET<< std::endl;
         _exit(1);
     }
     close(pipefd_[1]);
