@@ -15,7 +15,8 @@ DataSocket::~DataSocket() {
 }
 
 bool DataSocket::receiveData() {
-    char buffer[4096];
+    std::cout << CYAN << "DataSocket::receiveData" << RESET << std::endl;
+    char buffer[30];
     ssize_t bytesRead = recv(client_fd_, buffer, sizeof(buffer), 0);
 
     if (bytesRead > 0) {

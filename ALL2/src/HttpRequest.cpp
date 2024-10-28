@@ -149,3 +149,13 @@ std::string HttpRequest::getQueryString() const {
     // Si aucun paramètre n'existe, retourner une chaîne vide
     return "";
 }
+
+void HttpRequest::displayContent() const
+{
+    std::cout << RED <<"HttpRequest::displayContent" << RESET << std::endl;
+    std::cout << RED <<"Method : "<< method << RESET << std::endl;
+    std::cout << RED <<"Path : " << path <<RESET << std::endl;
+    std::cout << RED <<"HttpVersion : " << httpVersion << RESET << std::endl;
+    // std::cout << RED <<"Headers" << RESET << std::endl;
+    std::cout << RED <<"Body : " << body << RESET << std::endl;
+}

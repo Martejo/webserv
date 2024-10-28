@@ -20,6 +20,8 @@ RequestHandler::RequestHandler(const Config& config, const std::vector<Server*>&
 RequestHandler::~RequestHandler() {}
 
 HttpResponse RequestHandler::handleRequest(const HttpRequest& request) {
+    std::cout << GREEN<< "RequestHandler::handleRequest" << RESET << std::endl;   //test
+    request.displayContent();
     // Sélectionner le serveur approprié
     const Server* server = selectServer(request);
     if (!server) {

@@ -22,6 +22,9 @@ class HttpRequest {
         const std::string& getBody() const;
         std::string getQueryString() const;
 
+        //debug
+        void displayContent() const;
+
 
     private:
         void parseRequestLine(const std::string& line);
