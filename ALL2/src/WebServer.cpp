@@ -78,7 +78,7 @@ void WebServer::runEventLoop() {
             if (dataSocket->hasCgiProcess() && !dataSocket->isCgiComplete()) {
                 struct pollfd cgiPfd;
                 cgiPfd.fd = dataSocket->getCgiPipeFd();
-                std::cout << "add pipe to Poll : "<< cgiPfd.fd << std::endl;//test
+                // std::cout << "add pipe to Poll : "<< cgiPfd.fd << std::endl;//test
                 cgiPfd.events = POLLIN;
                 cgiPfd.revents = 0;
                 pollfds.push_back(cgiPfd);
@@ -133,11 +133,16 @@ void WebServer::runEventLoop() {
                 // std::cout << RED << "AAA" << RESET<< std::endl;//test
                 DataSocket* dataSocket = pollDataSockets[i];
                 if (pollfds[i].revents & POLLIN) {
-                    std::cout << RED << "BBB" << RESET<< std::endl;//test
+                    // std::cout << RED << "BBB" << RESET<< std::endl;//test
                     dataSocket->readFromCgiPipe();
                 }
-                if (pollfds[i].revents & (POLLHUP | POLLERR | POLLNVAL)) {
-                    std::cout << RED << "CCC" << RESET<< std::endl;//test
+                else if (pollfds[i].revents & (POLLHUP)) {
+                    // std::cout << RED << "CCC" << RESET<< std::endl;//test
+                    dataSocket->readFromCgiPipe();
+                    dataSocket->closeCgiPipe();
+                }
+                else if (pollfds[i].revents & (POLLERR | POLLNVAL)) {
+                    // std::cout << RED << "DDD" << RESET<< std::endl;//test
                     dataSocket->closeCgiPipe();
                 }
             }

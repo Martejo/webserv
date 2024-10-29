@@ -20,8 +20,8 @@ private:
     void cleanupEnvp();
 
     pid_t pid_;
-    std::string scriptPath_;
-    std::string scriptFilePath_;
+    std::string scriptPath_;//scriptWorkingDir
+    std::string scriptFilePath_;//relativeFilePath
     std::vector<char*> envp_;
     int pipefd_[2];
 };

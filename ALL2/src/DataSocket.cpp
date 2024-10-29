@@ -4,6 +4,8 @@
 #include "Color_Macros.hpp"
 #include <unistd.h>
 #include <iostream>
+#include <errno.h>//debug
+#include <cstring>//debug
 
 DataSocket::DataSocket(int fd, const std::vector<Server*>& servers, const Config& config)
     : client_fd_(fd), associatedServers_(servers), requestComplete_(false), config_(config),
@@ -116,13 +118,13 @@ bool DataSocket::isCgiComplete() const {
 }
 
 void DataSocket::readFromCgiPipe() {
-    std::cout << "DataSocket::readFromCgiPipe" << std::endl;//test
-    
-    char buffer[1024];
+    char buffer[30];
     ssize_t bytesRead = read(cgiPipeFd_, buffer, sizeof(buffer));
+    std::cout << "DataSocket::readFromCgiPipe bytesread = "<< bytesRead << std::endl;//test
     if (bytesRead > 0) {
         cgiOutputBuffer_.append(buffer, bytesRead);
     } else if (bytesRead == 0) {
+        std::cout << "DataSocket::readFromCgiPipe EOF reached" << std::endl;//test
         // EOF reached, CGI process finished
         closeCgiPipe();
 
@@ -132,9 +134,16 @@ void DataSocket::readFromCgiPipe() {
         response.setHeader("Content-Type", "text/html");
         sendBuffer_ = response.generateResponse();
         sendBufferOffset_ = 0;
+        cgiOutputBuffer_.clear();
+    } 
+    else {
+    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        std::cerr << "DataSocket::readFromCgiPipe: Resource temporarily unavailable, retrying..." << std::endl;
+        // Optionnel : ajouter une petite pause avant de réessayer
     } else {
-        // Error occurred
+        std::cerr << "DataSocket::readFromCgiPipe Error occurred: " << strerror(errno) << std::endl; // Test
         closeCgiPipe();
+    }
     }
 }
 

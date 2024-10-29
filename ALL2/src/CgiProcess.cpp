@@ -20,25 +20,59 @@ CgiProcess::~CgiProcess() {
 }
 
 bool CgiProcess::start() {
-    std::cout << "CgiProcess::start"<<std::endl;
-    if (pipe(pipefd_) == -1) return false;
+    std::cout << "CgiProcess::start : path absolu repertoire : " << scriptPath_ << " path relatif fichier : " << scriptFilePath_ << std::endl;
 
+    if (pipe(pipefd_) == -1) {
+        std::cerr << "pipe failed"<<std::endl;//debug
+        return false;
+    }
+
+    // Rendre le descripteur de lecture non bloquant
     fcntl(pipefd_[0], F_SETFL, O_NONBLOCK);
 
     pid_ = fork();
-    if (pid_ == -1) return false;
+    if (pid_ == -1) {
+        std::cerr << "fork failed"<<std::endl;//debug
+        return false;
+    }
+
     if (pid_ == 0) {
+        // Processus enfant
+
+        // Fermer le descripteur de lecture inutilisé
         close(pipefd_[0]);
+
+        // Rediriger la sortie standard vers le descripteur d'écriture du pipe
         dup2(pipefd_[1], STDOUT_FILENO);
         close(pipefd_[1]);
-        // char* const argv[] = {const_cast<char*>("/usr/bin/python3"), const_cast<char*>(scriptFilePath_.c_str()), NULL};
-        char* const argv[] = {const_cast<char*>("/usr/bin/python3"), const_cast<char*>("/home/hanglade/Desktop/webserv/ALL2/www/cgi-bin/hello.py"), NULL};
-        std::cerr << CYAN << "before execve from child"<< RESET<< std::endl;
-        execve(argv[0], argv, envp_.data());
-        std::cerr << CYAN << "error execve from child"<< RESET<< std::endl;
-        _exit(1);
+
+        // Changer le répertoire de travail vers '/home/hanglade/Desktop/webserv/ALL2/www/cgi-bin/'
+        if (chdir(scriptPath_.c_str()) == -1) {
+            std::cerr << "chdir failed"<<std::endl;//debug
+            _exit(1);
+        }
+
+        // Préparer les arguments pour execve avec un chemin relatif pour 'display.py'
+        char* const argv[] = {
+            const_cast<char*>("/usr/bin/python3"),
+            const_cast<char*>(scriptFilePath_.c_str()),
+            NULL
+        };
+
+        std::cerr << CYAN << "before execve from child" << RESET << std::endl;
+
+        // Exécuter le script Python
+        if (execve(argv[0], argv, envp_.data()) == -1) {
+            std::cerr << "execve failed"<<std::endl;//debug
+            _exit(1);
+        }
     }
+
+    // Processus parent
+
+    // Fermer le descripteur d'écriture inutilisé
     close(pipefd_[1]);
+
     return true;
 }
 

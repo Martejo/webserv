@@ -144,8 +144,24 @@ void RequestHandler::process(const Server* server, const Location* location, con
 CgiProcess* RequestHandler::startCgiProcess(const Server* server, const Location* location , const HttpRequest& request) const {
     // (void)location;//debug
     // std::string scriptPath = server->getRoot();
-    std::string scriptPath = server->getRoot() + location->getPath();//test debug
-    std::string scriptFilePath = server->getRoot() + request.getPath();
+    char cwd[PATH_MAX];
+
+    if (getcwd(cwd, sizeof(cwd)) == NULL) {
+        std::cerr<< RED <<"RequestHandler::startCgiProcess : Error getcwd"<< RESET<<std::endl;
+    } 
+    std::string scriptPath = cwd ;
+    scriptPath += "/" ;
+    scriptPath += server->getRoot();
+    if (location){
+        scriptPath += "/" ;
+        scriptPath += location->getPath();
+        scriptPath += "/" ;
+    }
+    std::string scriptFilePath = request.getPath();
+    if (location && scriptFilePath.compare(0, location->getPath().length(), location->getPath()) == 0) {
+        scriptFilePath.erase(0, location->getPath().length());
+    }
+    scriptFilePath = "./" + scriptFilePath;
 
     std::vector<std::string> envVars;
     // Set up environment variables as needed
