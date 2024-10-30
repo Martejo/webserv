@@ -164,13 +164,6 @@ CgiProcess* RequestHandler::startCgiProcess(const Server* server, const Location
     scriptFilePath = "./" + scriptFilePath;
 
     std::vector<std::string> envVars;
-    envVars.push_back("GATEWAY_INTERFACE=CGI/1.1");
-    envVars.push_back("SERVER_PROTOCOL=HTTP/1.1");
-    envVars.push_back("REQUEST_METHOD=" + request.getMethod());
-    envVars.push_back("SCRIPT_FILENAME=" + scriptFilePath);
-    envVars.push_back("CONTENT_TYPE=" + request.getHeader("Content-Type"));
-    envVars.push_back("CONTENT_LENGTH=" + request.getHeader("Content-Length"));
-    envVars.push_back("QUERY_STRING=" + request.getQueryString());
     // Set up environment variables as needed
     std::cout << RED << "CGI scriptP : "<< scriptPath<< " scriptFileP : "<< scriptFilePath<< RESET << std::endl;//test
     CgiProcess* cgiProcess = new CgiProcess(scriptPath, scriptFilePath, envVars);
