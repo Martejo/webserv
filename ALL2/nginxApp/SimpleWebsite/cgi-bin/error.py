@@ -29,7 +29,7 @@ print(f"""<!DOCTYPE html>
     <title>Erreur {status_code} - {reason_phrase}</title>
 </head>
 <body>
-    <h1>Erreur {status_code}</h1>
+    <h1>Erreur {status_code} displayed from python cgi</h1>
     <p>{reason_phrase}</p>
 </body>
 </html>

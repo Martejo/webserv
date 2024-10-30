@@ -70,8 +70,9 @@ bool DataSocket::sendData() {
         return true;
     }
 
+    // Imprimer le contenu de sendBuffer_ qui sera envoyé
+    std::cout << YELLOW << sendBuffer_.substr(sendBufferOffset_) << RESET << std::endl;//debug test
     ssize_t bytesSent = send(client_fd_, sendBuffer_.c_str() + sendBufferOffset_, sendBuffer_.size() - sendBufferOffset_, 0);
-
     if (bytesSent > 0) {
         sendBufferOffset_ += bytesSent;
         if (sendBufferOffset_ >= sendBuffer_.size()) {

@@ -36,7 +36,7 @@ void HttpResponse::setHeader(const std::string& headerName, const std::string& h
 }
 
 std::string HttpResponse::generateResponse() const {
-    std::cout << YELLOW <<"\n\n\n\nREPONSE :HttpResponse::generateResponse()\n"<< std::endl;//test
+    // std::cout << YELLOW <<"\n\n\n\nREPONSE :HttpResponse::generateResponse()\n"<< std::endl;//test
     std::ostringstream response;
 
     // Status line
@@ -49,7 +49,7 @@ std::string HttpResponse::generateResponse() const {
 
     response << "\r\n"; // Empty line to separate headers from body
 
-    std::cout << "HEADERS\n" << response.str() << RESET << std::endl;//test
+    // std::cout << "HEADERS\n" << response.str() << RESET << std::endl;//test
     // std::cout << "\nBODY\n" << body << RESET << std::endl;//test
 
     // Body

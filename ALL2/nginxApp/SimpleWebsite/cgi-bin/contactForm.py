@@ -11,6 +11,7 @@ cgitb.enable()
 form = cgi.FieldStorage()
 
 name = form.getvalue('name')
+print(name) #test
 email = form.getvalue('email')
 message = form.getvalue('message')
 

@@ -1,4 +1,5 @@
 #include "../includes/Config.hpp"
+#include "../includes/Color_Macros.hpp"
 #include <iostream>
 
 Config::Config()
@@ -78,6 +79,7 @@ const std::vector<Server*>& Config::getServers() const
 // DEBUG
 void Config::displayConfig() const
 {
+    std::cout << GREEN;
     std::cout << "client_max_body_size global: " << this->getClientMaxBodySize() << std::endl;
 
     // Affichage des pages d'erreur globales
@@ -94,4 +96,5 @@ void Config::displayConfig() const
         const Server* server = servers[i];
         server->displayServer();
     }
+    std::cout << RESET;
 }

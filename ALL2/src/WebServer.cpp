@@ -18,6 +18,7 @@ void WebServer::loadConfiguration(const std::string& configFile) {
     try {
         ConfigParser parser(configFile);
         config_ = parser.parse();
+        config_->displayConfig();//debug
     } catch (const ParsingException &e) {
         throw (e);
     }
@@ -130,19 +131,15 @@ void WebServer::runEventLoop() {
                 }
             } else if (pollFdTypes[i] == 2) {
                 // Pipe CGI
-                // std::cout << RED << "AAA" << RESET<< std::endl;//test
                 DataSocket* dataSocket = pollDataSockets[i];
                 if (pollfds[i].revents & POLLIN) {
-                    // std::cout << RED << "BBB" << RESET<< std::endl;//test
                     dataSocket->readFromCgiPipe();
                 }
                 else if (pollfds[i].revents & (POLLHUP)) {
-                    // std::cout << RED << "CCC" << RESET<< std::endl;//test
                     dataSocket->readFromCgiPipe();
                     dataSocket->closeCgiPipe();
                 }
                 else if (pollfds[i].revents & (POLLERR | POLLNVAL)) {
-                    // std::cout << RED << "DDD" << RESET<< std::endl;//test
                     dataSocket->closeCgiPipe();
                 }
             }
