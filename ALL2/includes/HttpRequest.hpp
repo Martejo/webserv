@@ -28,17 +28,20 @@ class HttpRequest {
 
 
     private:
+
         void parseRequestLine(const std::string& line);
         void parseHeaderLine(const std::string& line);
+        void queryStringDecode();
 
-        std::string rawData;
-        std::string method;
-        std::string path;
-        std::string httpVersion;
-        std::string body;
-        size_t contentLength;
-        bool headersParsed;
-        std::map<std::string, std::string> headers;
+        std::string rawData_;
+        std::string method_;
+        std::string path_;
+        std::string queryString_;
+        std::string httpVersion_;
+        std::string body_;
+        size_t contentLength_;
+        bool headersParsed_;
+        std::map<std::string, std::string> headers_;
 
         // État du parsing
         enum ParseState { REQUEST_LINE, HEADERS, BODY, COMPLETE };
