@@ -112,41 +112,7 @@ void CgiProcess::cleanupEnvp() {
 }
 
 
-// Function to parse the query string into parameters
-std::map<std::string, std::string> CgiProcess::createScriptParams(const std::string& queryString) {
-    std::map<std::string, std::string> params;
-    std::string::size_type last_pos = 0, amp_pos;
 
-    while ((amp_pos = queryString.find('&', last_pos)) != std::string::npos) {
-        std::string key_value_pair = queryString.substr(last_pos, amp_pos - last_pos);
-        std::string::size_type eq_pos = key_value_pair.find('=');
-        if (eq_pos != std::string::npos) {
-            std::string key = key_value_pair.substr(0, eq_pos);
-            std::string value = key_value_pair.substr(eq_pos + 1);
-            params[key] = value;
-        } else if (!key_value_pair.empty()) {
-            // If there's no '=', treat the entire string as a key with an empty value
-            params[key_value_pair] = "";
-        }
-        last_pos = amp_pos + 1;
-    }
-
-    // Handle the last parameter (or only parameter if no '&' was found)
-    std::string key_value_pair = queryString.substr(last_pos);
-    if (!key_value_pair.empty()) {
-        std::string::size_type eq_pos = key_value_pair.find('=');
-        if (eq_pos != std::string::npos) {
-            std::string key = key_value_pair.substr(0, eq_pos);
-            std::string value = key_value_pair.substr(eq_pos + 1);
-            params[key] = value;
-        } else {
-            // If there's no '=', treat the entire string as a key with an empty value
-            params[key_value_pair] = "";
-        }
-    }
-
-    return params;
-}
 
 void CgiProcess::createArgs(const std::map<std::string, std::string>& scriptParams) {
     // Chemin vers l'interpréteur Python

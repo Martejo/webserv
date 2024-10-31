@@ -164,6 +164,27 @@ CgiProcess* RequestHandler::startCgiProcess(const Server* server, const Location
     }
     relativeFilePath = "./" + relativeFilePath;
 
+    std::map<std::string, std::string> params;
+    if (request.getMethod() == "GET") {
+        // Extraire les paramètres de la query string
+        params = queryStringToParams(request.getQueryString());
+    } else if (request.getMethod() == "POST") {
+        std::string contentType = request.getHeader("Content-Type");
+        if (contentType == "application/x-www-form-urlencoded") {
+            // Extraire les paramètres du corps de la requête
+            params = parsePostData(request.getBody());
+        } else {
+            // Gérer d'autres types de contenu ou renvoyer une erreur
+            std::cerr << "Type de contenu non pris en charge pour POST: " << contentType << std::endl;
+            return NULL;
+        }
+    } else {
+        // Méthode non prise en charge
+        std::cerr << "Méthode HTTP non prise en charge: " << request.getMethod() << std::endl;
+        return NULL;
+    }
+
+
     std::vector<std::string> envVars;
     envVars.push_back("GATEWAY_INTERFACE=CGI/1.1");
     envVars.push_back("SERVER_PROTOCOL=HTTP/1.1");
@@ -171,15 +192,105 @@ CgiProcess* RequestHandler::startCgiProcess(const Server* server, const Location
     envVars.push_back("SCRIPT_FILENAME=" + relativeFilePath);
     envVars.push_back("CONTENT_TYPE=" + request.getHeader("Content-Type"));
     envVars.push_back("CONTENT_LENGTH=" + request.getHeader("Content-Length"));
-    // envVars.push_back("QUERY_STRING=" + request.getQueryString());//inutile puisque deja envoyees dans les arguments
+    envVars.push_back("QUERY_STRING=" + request.getQueryString());//inutile puisque deja envoyees dans les arguments
     // std::cout << RED << "CGI scriptP : "<< scriptWorkingDir<< " scriptFileP : "<< relativeFilePath<< RESET << std::endl;//test
-    CgiProcess* cgiProcess = new CgiProcess(scriptWorkingDir, relativeFilePath, request.getQueryString(), envVars);
+
+
+    // Créer l'objet CgiProcess avec les paramètres
+    CgiProcess* cgiProcess = new CgiProcess(scriptWorkingDir, relativeFilePath, params, envVars);
     if (!cgiProcess->start()) {
         delete cgiProcess;
         return NULL;
     }
     return cgiProcess;
 }
+//     std::vector<std::string> envVars;
+//     envVars.push_back("GATEWAY_INTERFACE=CGI/1.1");
+//     envVars.push_back("SERVER_PROTOCOL=HTTP/1.1");
+//     envVars.push_back("REQUEST_METHOD=" + request.getMethod());
+//     envVars.push_back("SCRIPT_FILENAME=" + relativeFilePath);
+//     envVars.push_back("CONTENT_TYPE=" + request.getHeader("Content-Type"));
+//     envVars.push_back("CONTENT_LENGTH=" + request.getHeader("Content-Length"));
+//     // envVars.push_back("QUERY_STRING=" + request.getQueryString());//inutile puisque deja envoyees dans les arguments
+//     // std::cout << RED << "CGI scriptP : "<< scriptWorkingDir<< " scriptFileP : "<< relativeFilePath<< RESET << std::endl;//test
+//     CgiProcess* cgiProcess = new CgiProcess(scriptWorkingDir, relativeFilePath, request.getQueryString(), envVars);
+//     if (!cgiProcess->start()) {
+//         delete cgiProcess;
+//         return NULL;
+//     }
+//     return cgiProcess;
+// }
+
+// Function to parse the query string into parameters
+
+std::map<std::string, std::string> queryStringToParams(const std::string& queryString) {
+    std::map<std::string, std::string> params;
+    std::string::size_type last_pos = 0, amp_pos;
+
+    while ((amp_pos = queryString.find('&', last_pos)) != std::string::npos) {
+        std::string key_value_pair = queryString.substr(last_pos, amp_pos - last_pos);
+        std::string::size_type eq_pos = key_value_pair.find('=');
+        if (eq_pos != std::string::npos) {
+            std::string key = key_value_pair.substr(0, eq_pos);
+            std::string value = key_value_pair.substr(eq_pos + 1);
+            params[key] = value;
+        } else if (!key_value_pair.empty()) {
+            // If there's no '=', treat the entire string as a key with an empty value
+            params[key_value_pair] = "";
+        }
+        last_pos = amp_pos + 1;
+    }
+
+    // Handle the last parameter (or only parameter if no '&' was found)
+    std::string key_value_pair = queryString.substr(last_pos);
+    if (!key_value_pair.empty()) {
+        std::string::size_type eq_pos = key_value_pair.find('=');
+        if (eq_pos != std::string::npos) {
+            std::string key = key_value_pair.substr(0, eq_pos);
+            std::string value = key_value_pair.substr(eq_pos + 1);
+            params[key] = value;
+        } else {
+            // If there's no '=', treat the entire string as a key with an empty value
+            params[key_value_pair] = "";
+        }
+    }
+
+    return params;
+}
+
+std::map<std::string, std::string> parsePostData(const std::string& postData) {
+    std::map<std::string, std::string> params;
+    std::string::size_type last_pos = 0, amp_pos;
+
+    while ((amp_pos = postData.find('&', last_pos)) != std::string::npos) {
+        std::string key_value_pair = postData.substr(last_pos, amp_pos - last_pos);
+        std::string::size_type eq_pos = key_value_pair.find('=');
+        if (eq_pos != std::string::npos) {
+            std::string key = key_value_pair.substr(0, eq_pos);
+            std::string value = key_value_pair.substr(eq_pos + 1);
+            params[key] = value;
+        } else if (!key_value_pair.empty()) {
+            params[key_value_pair] = "";
+        }
+        last_pos = amp_pos + 1;
+    }
+
+    // Traiter le dernier paramètre
+    std::string key_value_pair = postData.substr(last_pos);
+    if (!key_value_pair.empty()) {
+        std::string::size_type eq_pos = key_value_pair.find('=');
+        if (eq_pos != std::string::npos) {
+            std::string key = key_value_pair.substr(0, eq_pos);
+            std::string value = key_value_pair.substr(eq_pos + 1);
+            params[key] = value;
+        } else {
+            params[key_value_pair] = "";
+        }
+    }
+
+    return params;
+}
+
 
 HttpResponse RequestHandler::serveStaticFile(const Server* server, const Location* location, const HttpRequest& request) const 
 {
