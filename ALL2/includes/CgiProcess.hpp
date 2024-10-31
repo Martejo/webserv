@@ -4,10 +4,12 @@
 
 #include <string>
 #include <vector>
+#include <map>
 
 class CgiProcess {
 public:
-    CgiProcess(const std::string& scriptPath, const std::string& scriptFilePath, const std::vector<std::string>& envVars);
+    // Modifié le constructeur pour accepter les arguments sous forme de map
+    CgiProcess(const std::string& scriptWorkingDir, const std::string& relativeFilePath, const std::string& queryString, const std::vector<std::string>& envVars);
     ~CgiProcess();
 
     bool start();
@@ -16,14 +18,27 @@ public:
     std::string readOutput();
 
 private:
+    pid_t pid_;
+    int pipefd_[2];
+
+    std::string scriptWorkingDir_;
+    std::string relativeFilePath_;
+
+    // Ajout des membres pour stocker les arguments et l'environnement
+    std::vector<char*> args_;
+    std::vector<char*> envp_;
+
+    // Stockage des chaînes pour assurer leur durée de vie
+    std::vector<std::string> argStrings_;
+    std::vector<std::string> envStrings_;
+
+    // Méthodes pour créer et nettoyer les arguments et l'environnement
+    void createArgs(const std::map<std::string, std::string>& scriptParams);
+    void cleanupArgs();
+
+    std::map<std::string, std::string> createScriptParams(const std::string& queryString);
     void createEnvp(const std::vector<std::string>& envVars);
     void cleanupEnvp();
-
-    pid_t pid_;
-    std::string scriptPath_;//scriptWorkingDir
-    std::string scriptFilePath_;//relativeFilePath
-    std::vector<char*> envp_;
-    int pipefd_[2];
 };
 
 #endif // CGIPROCESS_HPP

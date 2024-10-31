@@ -71,7 +71,8 @@ bool DataSocket::sendData() {
     }
 
     // Imprimer le contenu de sendBuffer_ qui sera envoyé
-    std::cout << YELLOW << sendBuffer_.substr(sendBufferOffset_) << RESET << std::endl;//debug test
+    // std::cout << YELLOW << sendBuffer_.substr(sendBufferOffset_) << RESET << std::endl;//debug test
+    std::cout << YELLOW <<  "send data"<< RESET << std::endl;//debug test
     ssize_t bytesSent = send(client_fd_, sendBuffer_.c_str() + sendBufferOffset_, sendBuffer_.size() - sendBufferOffset_, 0);
     if (bytesSent > 0) {
         sendBufferOffset_ += bytesSent;
@@ -119,13 +120,13 @@ bool DataSocket::isCgiComplete() const {
 }
 
 void DataSocket::readFromCgiPipe() {
-    char buffer[30];
+    char buffer[4096];
     ssize_t bytesRead = read(cgiPipeFd_, buffer, sizeof(buffer));
-    std::cout << "DataSocket::readFromCgiPipe bytesread = "<< bytesRead << std::endl;//test
+    // std::cout << "DataSocket::readFromCgiPipe bytesread = "<< bytesRead << std::endl;//test
     if (bytesRead > 0) {
         cgiOutputBuffer_.append(buffer, bytesRead);
     } else if (bytesRead == 0) {
-        std::cout << "DataSocket::readFromCgiPipe EOF reached" << std::endl;//test
+        // std::cout << "DataSocket::readFromCgiPipe EOF reached" << std::endl;//test
         // EOF reached, CGI process finished
         closeCgiPipe();
 
@@ -137,15 +138,15 @@ void DataSocket::readFromCgiPipe() {
         sendBufferOffset_ = 0;
         cgiOutputBuffer_.clear();
     } 
-    else {
-    if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        std::cerr << "DataSocket::readFromCgiPipe: Resource temporarily unavailable, retrying..." << std::endl;
-        // Optionnel : ajouter une petite pause avant de réessayer
-    } else {
-        std::cerr << "DataSocket::readFromCgiPipe Error occurred: " << strerror(errno) << std::endl; // Test
-        closeCgiPipe();
-    }
-    }
+    // else {
+    // if (errno == EAGAIN || errno == EWOULDBLOCK) {
+    //     std::cerr << "DataSocket::readFromCgiPipe: Resource temporarily unavailable, retrying..." << std::endl;
+    //     // Optionnel : ajouter une petite pause avant de réessayer
+    // } else {
+    //     std::cerr << "DataSocket::readFromCgiPipe Error occurred: " << strerror(errno) << std::endl; // Test
+    //     closeCgiPipe();
+    // }
+    // }
 }
 
 void DataSocket::closeCgiPipe() {

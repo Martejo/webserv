@@ -430,27 +430,30 @@ void ConfigParser::parseLocation(Server &server)
         {
             ++currentTokenIndex_;
             std::vector<std::string> methods;
-            while (currentTokenIndex_ < tokens_.size() && tokens_[currentTokenIndex_] != "{")
+            while (currentTokenIndex_ < tokens_.size() && tokens_[currentTokenIndex_] != ";")
             {
                 methods.push_back(tokens_[currentTokenIndex_]);
                 ++currentTokenIndex_;
             }
             location.setAllowedMethods(methods);
-
-            if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != "{")
-                throw ParsingException("'{' attendu après les méthodes de 'limit_except'");
-
-            // Ignorer le contenu du bloc 'limit_except' pour simplifier
+            if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != ";")
+                throw ParsingException("';' attendu après la valeur de 'cgi'");
             ++currentTokenIndex_;
-            int braceCount = 1;
-            while (currentTokenIndex_ < tokens_.size() && braceCount > 0)
-            {
-                if (tokens_[currentTokenIndex_] == "{")
-                    ++braceCount;
-                else if (tokens_[currentTokenIndex_] == "}")
-                    --braceCount;
-                ++currentTokenIndex_;
-            }
+
+            // if (currentTokenIndex_ >= tokens_.size() || tokens_[currentTokenIndex_] != "{")
+            //     throw ParsingException("'{' attendu après les méthodes de 'limit_except'");
+
+            // // Ignorer le contenu du bloc 'limit_except' pour simplifier
+            // ++currentTokenIndex_;
+            // int braceCount = 1;
+            // while (currentTokenIndex_ < tokens_.size() && braceCount > 0)
+            // {
+            //     if (tokens_[currentTokenIndex_] == "{")
+            //         ++braceCount;
+            //     else if (tokens_[currentTokenIndex_] == "}")
+            //         --braceCount;
+            //     ++currentTokenIndex_;
+            // }
         }
         else if (token == "return")
         {

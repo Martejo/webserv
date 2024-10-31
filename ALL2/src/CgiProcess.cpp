@@ -5,14 +5,21 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <iostream>
+#include <cstdlib> // Pour _exit()
+#include <errno.h>
+#include <cstring> // Pour strerror()
 
-CgiProcess::CgiProcess(const std::string& scriptPath, const std::string& scriptFilePath, const std::vector<std::string>& envVars)
-    : pid_(-1), scriptPath_(scriptPath), scriptFilePath_(scriptFilePath) {
+CgiProcess::CgiProcess(const std::string& scriptWorkingDir, const std::string& relativeFilePath, const std::string& queryString, const std::vector<std::string>& envVars)
+    : pid_(-1), scriptWorkingDir_(scriptWorkingDir), relativeFilePath_(relativeFilePath) {
+    // Créer les arguments pour execve()
+    createArgs(createScriptParams(queryString));
+    // Créer les variables d'environnement pour execve()
     createEnvp(envVars);
     pipefd_[0] = pipefd_[1] = -1;
 }
 
 CgiProcess::~CgiProcess() {
+    cleanupArgs();
     cleanupEnvp();
     if (pipefd_[0] != -1) close(pipefd_[0]);
     if (pipefd_[1] != -1) close(pipefd_[1]);
@@ -20,19 +27,22 @@ CgiProcess::~CgiProcess() {
 }
 
 bool CgiProcess::start() {
-    std::cout << "CgiProcess::start : path absolu repertoire : " << scriptPath_ << " path relatif fichier : " << scriptFilePath_ << std::endl;
+    std::cout << "CgiProcess::start : path absolu repertoire : " << scriptWorkingDir_ << " path relatif fichier : " << relativeFilePath_ << std::endl;
 
     if (pipe(pipefd_) == -1) {
-        std::cerr << "pipe failed"<<std::endl;//debug
+        std::cerr << "pipe failed: " << strerror(errno) << std::endl;
         return false;
     }
 
     // Rendre le descripteur de lecture non bloquant
-    fcntl(pipefd_[0], F_SETFL, O_NONBLOCK);
+    if (fcntl(pipefd_[0], F_SETFL, O_NONBLOCK) == -1) {
+        std::cerr << "fcntl failed: " << strerror(errno) << std::endl;
+        return false;
+    }
 
     pid_ = fork();
     if (pid_ == -1) {
-        std::cerr << "fork failed"<<std::endl;//debug
+        std::cerr << "fork failed: " << strerror(errno) << std::endl;
         return false;
     }
 
@@ -46,24 +56,17 @@ bool CgiProcess::start() {
         dup2(pipefd_[1], STDOUT_FILENO);
         close(pipefd_[1]);
 
-        // Changer le répertoire de travail vers '/home/hanglade/Desktop/webserv/ALL2/www/cgi-bin/'
-        if (chdir(scriptPath_.c_str()) == -1) {
-            std::cerr << "chdir failed"<<std::endl;//debug
+        // Changer le répertoire de travail vers 'scriptWorkingDir_'
+        if (chdir(scriptWorkingDir_.c_str()) == -1) {
+            std::cerr << "chdir failed: " << strerror(errno) << std::endl;
             _exit(1);
         }
 
-        // Préparer les arguments pour execve avec un chemin relatif pour 'display.py'
-        char* const argv[] = {
-            const_cast<char*>("/usr/bin/python3"),
-            const_cast<char*>(scriptFilePath_.c_str()),
-            NULL
-        };
-
+        // Exécuter le script Python avec les arguments et l'environnement
         std::cerr << CYAN << "before execve from child" << RESET << std::endl;
 
-        // Exécuter le script Python
-        if (execve(argv[0], argv, envp_.data()) == -1) {
-            std::cerr << "execve failed"<<std::endl;//debug
+        if (execve(args_[0], &args_[0], &envp_[0]) == -1) {
+            std::cerr << "execve failed: " << strerror(errno) << std::endl;
             _exit(1);
         }
     }
@@ -77,7 +80,6 @@ bool CgiProcess::start() {
 }
 
 bool CgiProcess::isRunning() const {
-    std::cout << "CgiProcess::isRunning"<<std::endl;
     int status;
     return waitpid(pid_, &status, WNOHANG) == 0;
 }
@@ -87,8 +89,7 @@ int CgiProcess::getPipeFd() const {
 }
 
 std::string CgiProcess::readOutput() {
-    std::cout << "CgiProcess::readOutput"<<std::endl;
-    char buffer[1024];
+    char buffer[4096];
     ssize_t bytesRead = read(pipefd_[0], buffer, sizeof(buffer));
     if (bytesRead > 0) {
         return std::string(buffer, bytesRead);
@@ -97,12 +98,79 @@ std::string CgiProcess::readOutput() {
 }
 
 void CgiProcess::createEnvp(const std::vector<std::string>& envVars) {
+    // Stocker les chaînes d'environnement pour assurer leur durée de vie
     for (size_t i = 0; i < envVars.size(); ++i) {
-        envp_.push_back(const_cast<char*>(envVars[i].c_str()));
+        envStrings_.push_back(envVars[i]);
+        envp_.push_back(const_cast<char*>(envStrings_.back().c_str()));
     }
     envp_.push_back(NULL);
 }
 
 void CgiProcess::cleanupEnvp() {
     envp_.clear();
+    envStrings_.clear();
+}
+
+
+// Function to parse the query string into parameters
+std::map<std::string, std::string> CgiProcess::createScriptParams(const std::string& queryString) {
+    std::map<std::string, std::string> params;
+    std::string::size_type last_pos = 0, amp_pos;
+
+    while ((amp_pos = queryString.find('&', last_pos)) != std::string::npos) {
+        std::string key_value_pair = queryString.substr(last_pos, amp_pos - last_pos);
+        std::string::size_type eq_pos = key_value_pair.find('=');
+        if (eq_pos != std::string::npos) {
+            std::string key = key_value_pair.substr(0, eq_pos);
+            std::string value = key_value_pair.substr(eq_pos + 1);
+            params[key] = value;
+        } else if (!key_value_pair.empty()) {
+            // If there's no '=', treat the entire string as a key with an empty value
+            params[key_value_pair] = "";
+        }
+        last_pos = amp_pos + 1;
+    }
+
+    // Handle the last parameter (or only parameter if no '&' was found)
+    std::string key_value_pair = queryString.substr(last_pos);
+    if (!key_value_pair.empty()) {
+        std::string::size_type eq_pos = key_value_pair.find('=');
+        if (eq_pos != std::string::npos) {
+            std::string key = key_value_pair.substr(0, eq_pos);
+            std::string value = key_value_pair.substr(eq_pos + 1);
+            params[key] = value;
+        } else {
+            // If there's no '=', treat the entire string as a key with an empty value
+            params[key_value_pair] = "";
+        }
+    }
+
+    return params;
+}
+
+void CgiProcess::createArgs(const std::map<std::string, std::string>& scriptParams) {
+    // Chemin vers l'interpréteur Python
+    std::string pythonInterpreter = "/usr/bin/python3";
+    argStrings_.push_back(pythonInterpreter);
+    args_.push_back(const_cast<char*>(argStrings_.back().c_str()));
+
+    // Chemin relatif vers le script Python
+    argStrings_.push_back(relativeFilePath_);
+    args_.push_back(const_cast<char*>(argStrings_.back().c_str()));
+
+    // Ajouter les paramètres du script en tant qu'arguments
+    for (std::map<std::string, std::string>::const_iterator it = scriptParams.begin(); it != scriptParams.end(); ++it) {
+        // Format des arguments : --key=value
+        std::string arg = "--" + it->first + "=" + it->second;
+        argStrings_.push_back(arg);
+        args_.push_back(const_cast<char*>(argStrings_.back().c_str()));
+    }
+
+    // Terminer le tableau d'arguments avec NULL
+    args_.push_back(NULL);
+}
+
+void CgiProcess::cleanupArgs() {
+    args_.clear();
+    argStrings_.clear();
 }

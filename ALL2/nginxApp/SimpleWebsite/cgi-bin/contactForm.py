@@ -1,19 +1,26 @@
 #!/usr/bin/python3
 
-import cgi
-import cgitb
+import sys
 import html
 
-# Activer le débogage en cas d'erreur
-cgitb.enable()
+# Fonction pour analyser les arguments de la ligne de commande
+def parse_arguments():
+    args = sys.argv[1:]
+    params = {}
+    for arg in args:
+        if arg.startswith('--'):
+            key_value = arg[2:].split('=', 1)
+            if len(key_value) == 2:
+                key, value = key_value
+                params[key] = value
+    return params
 
-# Récupérer les données du formulaire
-form = cgi.FieldStorage()
+# Récupérer les données du formulaire à partir des arguments
+params = parse_arguments()
 
-name = form.getvalue('name')
-print(name) #test
-email = form.getvalue('email')
-message = form.getvalue('message')
+name = params.get('name')
+email = params.get('email')
+message = params.get('message')
 
 # Vérifier que tous les champs sont remplis
 if not all([name, email, message]):
@@ -51,6 +58,7 @@ print(f"""
 <body>
     <h1>Merci, {html.escape(name)}</h1>
     <p>Votre message a été reçu avec succès. Nous vous contacterons bientôt à l'adresse {html.escape(email)}.</p>
+    <p>Voici le recapitulatif de votre message :'{html.escape(message)}'.</p>
 </body>
 </html>
 """)

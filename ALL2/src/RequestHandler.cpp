@@ -130,43 +130,50 @@ void RequestHandler::process(const Server* server, const Location* location, con
     }
 
     // File upload handling
-    if (request.getMethod() == "POST" && location && location->getUploadEnable()) {
+    if (request.getMethod() == "POST" && location && location->getUploadEnable() && location->getUploadEnable()) {
         result.response = handleFileUpload(request, location);
         result.responseReady = true;
         return;
     }
 
     // Default error
+    std::cout << RED << "RequestHandler::process ERROR "<<YELLOW<< request.getMethod() <<" "<< location<< " "<< location->getUploadEnable() << "" << location->getUploadStore()<< RESET <<std::endl;//debug
     result.response = handleError(400, server);
     result.responseReady = true;
 }
 
 CgiProcess* RequestHandler::startCgiProcess(const Server* server, const Location* location , const HttpRequest& request) const {
     // (void)location;//debug
-    // std::string scriptPath = server->getRoot();
+    // std::string scriptWorkingDir = server->getRoot();
     char cwd[PATH_MAX];
 
     if (getcwd(cwd, sizeof(cwd)) == NULL) {
         std::cerr<< RED <<"RequestHandler::startCgiProcess : Error getcwd"<< RESET<<std::endl;
     } 
-    std::string scriptPath = cwd ;
-    scriptPath += "/" ;
-    scriptPath += server->getRoot();
+    std::string scriptWorkingDir = cwd ;
+    scriptWorkingDir += "/" ;
+    scriptWorkingDir += server->getRoot();
     if (location){
-        scriptPath += "/" ;
-        scriptPath += location->getPath();
-        scriptPath += "/" ;
+        scriptWorkingDir += "/" ;
+        scriptWorkingDir += location->getPath();
+        scriptWorkingDir += "/" ;
     }
-    std::string scriptFilePath = request.getPath();
-    if (location && scriptFilePath.compare(0, location->getPath().length(), location->getPath()) == 0) {
-        scriptFilePath.erase(0, location->getPath().length());
+    std::string relativeFilePath = request.getPath();
+    if (location && relativeFilePath.compare(0, location->getPath().length(), location->getPath()) == 0) {
+        relativeFilePath.erase(0, location->getPath().length());
     }
-    scriptFilePath = "./" + scriptFilePath;
+    relativeFilePath = "./" + relativeFilePath;
 
     std::vector<std::string> envVars;
-    // Set up environment variables as needed
-    std::cout << RED << "CGI scriptP : "<< scriptPath<< " scriptFileP : "<< scriptFilePath<< RESET << std::endl;//test
-    CgiProcess* cgiProcess = new CgiProcess(scriptPath, scriptFilePath, envVars);
+    envVars.push_back("GATEWAY_INTERFACE=CGI/1.1");
+    envVars.push_back("SERVER_PROTOCOL=HTTP/1.1");
+    envVars.push_back("REQUEST_METHOD=" + request.getMethod());
+    envVars.push_back("SCRIPT_FILENAME=" + relativeFilePath);
+    envVars.push_back("CONTENT_TYPE=" + request.getHeader("Content-Type"));
+    envVars.push_back("CONTENT_LENGTH=" + request.getHeader("Content-Length"));
+    // envVars.push_back("QUERY_STRING=" + request.getQueryString());//inutile puisque deja envoyees dans les arguments
+    // std::cout << RED << "CGI scriptP : "<< scriptWorkingDir<< " scriptFileP : "<< relativeFilePath<< RESET << std::endl;//test
+    CgiProcess* cgiProcess = new CgiProcess(scriptWorkingDir, relativeFilePath, request.getQueryString(), envVars);
     if (!cgiProcess->start()) {
         delete cgiProcess;
         return NULL;
@@ -258,19 +265,19 @@ HttpResponse RequestHandler::serveStaticFile(const Server* server, const Locatio
 
 // HttpResponse RequestHandler::serveFileWithCGI(const Server* server, const Location* /* location */, const HttpRequest& request) const {
 //     HttpResponse response;
-//     std::string scriptPath = "/usr/bin/python3";
-//     std::string scriptFilePath = server->getRoot() + request.getPath();
+//     std::string scriptWorkingDir = "/usr/bin/python3";
+//     std::string relativeFilePath = server->getRoot() + request.getPath();
 
 //     std::vector<std::string> envVars;
 //     envVars.push_back("GATEWAY_INTERFACE=CGI/1.1");
 //     envVars.push_back("SERVER_PROTOCOL=HTTP/1.1");
 //     envVars.push_back("REQUEST_METHOD=" + request.getMethod());
-//     envVars.push_back("SCRIPT_FILENAME=" + scriptFilePath);
+//     envVars.push_back("SCRIPT_FILENAME=" + relativeFilePath);
 //     envVars.push_back("CONTENT_TYPE=" + request.getHeader("Content-Type"));
 //     envVars.push_back("CONTENT_LENGTH=" + request.getHeader("Content-Length"));
 //     envVars.push_back("QUERY_STRING=" + request.getQueryString());
 
-//     CgiProcess cgiProcess(scriptPath, scriptFilePath, envVars);
+//     CgiProcess cgiProcess(scriptWorkingDir, relativeFilePath, envVars);
 //     if (!cgiProcess.start()) {
 //         return handleError(500, server);
 //     }
