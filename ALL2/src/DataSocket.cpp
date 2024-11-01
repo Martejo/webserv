@@ -133,7 +133,7 @@ void DataSocket::readFromCgiPipe() {
         HttpResponse response;
         response.setStatusCode(200);
         response.setBody(cgiOutputBuffer_);
-        response.setHeader("Content-Type", "text/html");
+        response.setHeader("Content-Type", "text/html; charset=UTF-8");
         sendBuffer_ = response.generateResponse();
         sendBufferOffset_ = 0;
         cgiOutputBuffer_.clear();

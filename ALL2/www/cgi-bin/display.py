@@ -15,9 +15,6 @@ def main():
 
     # Obtenir l'environnement du script
     environment_vars = os.environ
-
-    # Afficher les informations comme réponse CGI
-    print("Content-Type: text/plain\n")  # En-tête CGI indiquant le type de contenu (texte brut)
     
     # Afficher le répertoire de travail
     print(f"Le répertoire de travail actuel est : {current_working_directory}\n")

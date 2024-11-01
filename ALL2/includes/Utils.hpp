@@ -26,27 +26,6 @@ bool endsWith(const std::string& fullString, const std::string& ending) {
     }
 }
 
-std::string urlDecode(const std::string& encoded) {
-    std::string decoded;
-    char hex[3];
-    hex[2] = '\0';
-    for (std::string::size_type i = 0; i < encoded.length(); ++i) {
-        if (encoded[i] == '%') {
-            if (i + 2 < encoded.length()) {
-                hex[0] = encoded[i + 1];
-                hex[1] = encoded[i + 2];
-                decoded += static_cast<char>(std::strtol(hex, NULL, 16));
-                i += 2;
-            }
-        } else if (encoded[i] == '+') {
-            decoded += ' ';
-        } else {
-            decoded += encoded[i];
-        }
-    }
-    return decoded;
-}
-
 // Ajoutez d'autres surcharges si nécessaire pour différents types
 
 #endif // UTILS_HPP

@@ -20,8 +20,8 @@ except Exception as e:
     exit()
 
 # Début du document HTML
-print("Content-Type: text/html; charset=UTF-8")
-print()
+# print("Content-Type: text/html; charset=UTF-8")
+# print()
 print("""
 <!DOCTYPE html>
 <html lang="fr">

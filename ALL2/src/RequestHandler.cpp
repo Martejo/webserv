@@ -82,8 +82,7 @@ void RequestHandler::process(const Server* server, const Location* location, con
         const std::vector<std::string>& allowedMethods = location->getAllowedMethods();
         if (!allowedMethods.empty()) {
             if (std::find(allowedMethods.begin(), allowedMethods.end(), request.getMethod()) == allowedMethods.end()) {
-                result.response.setStatusCode(405);
-                result.response.setBody("Method Not Allowed");
+                result.response = handleError(405, server);
                 std::string allowHeader;
                 for (size_t i = 0; i < allowedMethods.size(); ++i) {
                     allowHeader += allowedMethods[i];
@@ -353,57 +352,6 @@ HttpResponse RequestHandler::serveStaticFile(const Server* server, const Locatio
     return response;
 }
 
-// #include <cstdlib>  // Pour getenv, setenv
-// #include <sys/wait.h>  // Pour waitpid
-// #include <unistd.h>  // Pour fork, execve
-// #include <iostream>
-// #include <vector>
-// #include <fstream>
-// #include <sstream>
-
-
-// HttpResponse RequestHandler::serveFileWithCGI(const Server* server, const Location* /* location */, const HttpRequest& request) const {
-//     HttpResponse response;
-//     std::string scriptWorkingDir = "/usr/bin/python3";
-//     std::string relativeFilePath = server->getRoot() + request.getPath();
-
-//     std::vector<std::string> envVars;
-//     envVars.push_back("GATEWAY_INTERFACE=CGI/1.1");
-//     envVars.push_back("SERVER_PROTOCOL=HTTP/1.1");
-//     envVars.push_back("REQUEST_METHOD=" + request.getMethod());
-//     envVars.push_back("SCRIPT_FILENAME=" + relativeFilePath);
-//     envVars.push_back("CONTENT_TYPE=" + request.getHeader("Content-Type"));
-//     envVars.push_back("CONTENT_LENGTH=" + request.getHeader("Content-Length"));
-//     envVars.push_back("QUERY_STRING=" + request.getQueryString());
-
-//     CgiProcess cgiProcess(scriptWorkingDir, relativeFilePath, envVars);
-//     if (!cgiProcess.start()) {
-//         return handleError(500, server);
-//     }
-
-//     // Ajout de `cgiProcess.getPipeFd()` à poll
-//     struct pollfd cgiPollFd;  // Utiliser struct pour compatibilité C++98
-//     cgiPollFd.fd = cgiProcess.getPipeFd();
-//     cgiPollFd.events = POLLIN;  // Utiliser POLLIN sans faute de frappe
-
-//     std::stringstream cgiOutput;
-//     while (cgiProcess.isRunning()) {
-//         int ret = poll(&cgiPollFd, 1, 1000);  // Timeout de 1 seconde
-//         if (ret > 0 && (cgiPollFd.revents & POLLIN)) {
-//             cgiOutput << cgiProcess.readOutput();
-//         } else if (ret < 0) {
-//             return handleError(500, server);
-//         }
-//     }
-
-//     response.setStatusCode(200);
-//     response.setBody(cgiOutput.str());
-//     response.setHeader("Content-Type", "text/html");
-
-//     return response;
-// }
-
-
 HttpResponse RequestHandler::handleFileUpload(const HttpRequest& request, const Location* location) const {
     std::cout << RED << "RequestHandler::handleFileUpload" << RESET << std::endl;//test
     HttpResponse response;
@@ -565,11 +513,11 @@ HttpResponse RequestHandler::handleError(int statusCode, const Server* server) c
         // Récupérer depuis la configuration globale si aucun serveur n'est spécifié
         errorPageUri = config_.getErrorPage(statusCode);
     }
-
     if (!errorPageUri.empty()) {
         // Construire le chemin complet de la page d'erreur
-        std::string errorPagePath = server ? server->getRoot() + errorPageUri : config_.getRoot() + errorPageUri;
+        std::string errorPagePath = "/home/kali/Desktop/42/webserv/ALL2/" + server->getRoot() + errorPageUri;
         std::ifstream errorFile(errorPagePath.c_str(), std::ios::in | std::ios::binary);
+        std::cout << CYAN << errorPagePath << std::endl; //debug
         if (errorFile.is_open()) {
             std::stringstream buffer;
             buffer << errorFile.rdbuf();
@@ -577,15 +525,23 @@ HttpResponse RequestHandler::handleError(int statusCode, const Server* server) c
             errorFile.close();
             response.setBody(errorContent);
         } else {
+            std::cout << CYAN << "errorFile not opened" << std::endl; //debug
             response.setBody("Error " + ::toString(statusCode));
         }
     } else {
         // Message d'erreur par défaut
         switch (statusCode) {
             case 400: response.setBody("Bad Request"); break;
+            case 401: response.setBody("Unauthorized"); break;
             case 403: response.setBody("Forbidden"); break;
             case 404: response.setBody("Not Found"); break;
+            case 405: response.setBody("Method Not Allowed"); break;
+            case 408: response.setBody("Request Timeout"); break;
             case 500: response.setBody("Internal Server Error"); break;
+            case 501: response.setBody("Not Implemented"); break;
+            case 502: response.setBody("Bad Gateway"); break;
+            case 503: response.setBody("Service Unavailable"); break;
+            case 504: response.setBody("Gateway Timeout"); break;
             default: response.setBody("Error " + toString(statusCode));
         }
     }

@@ -24,8 +24,8 @@ message = params.get('message')
 
 # Vérifier que tous les champs sont remplis
 if not all([name, email, message]):
-    print("Content-Type: text/html; charset=UTF-8")
-    print()
+    # print("Content-Type: text/html; charset=UTF-8")
+    # print()
     print("<html><body>")
     print("<h1>Erreur</h1>")
     print("<p>Veuillez remplir tous les champs du formulaire.</p>")
@@ -37,8 +37,8 @@ try:
     with open('forms/contacts.txt', 'a', encoding='utf-8') as f:
         f.write(f"Nom: {name}\nEmail: {email}\nMessage: {message}\n---\n")
 except Exception as e:
-    print("Content-Type: text/html; charset=UTF-8")
-    print()
+    # print("Content-Type: text/html; charset=UTF-8")
+    # print()
     print("<html><body>")
     print("<h1>Erreur</h1>")
     print(f"<p>Une erreur est survenue lors de l'enregistrement des données: {e}</p>")
@@ -46,8 +46,8 @@ except Exception as e:
     exit()
 
 # Afficher une page de confirmation
-print("Content-Type: text/html; charset=UTF-8")
-print()
+# print("Content-Type: text/html; charset=UTF-8")
+# print()
 print(f"""
 <!DOCTYPE html>
 <html lang="fr">
