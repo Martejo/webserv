@@ -9,17 +9,17 @@
 #include <errno.h>
 #include <cstring> // Pour strerror()
 
-CgiProcess::CgiProcess(const std::string& scriptWorkingDir, const std::string& relativeFilePath, const std::string& queryString, const std::vector<std::string>& envVars)
+CgiProcess::CgiProcess(const std::string& scriptWorkingDir, const std::string& relativeFilePath, const std::map<std::string, std::string>& params, const std::vector<std::string>& envVars)
     : pid_(-1), scriptWorkingDir_(scriptWorkingDir), relativeFilePath_(relativeFilePath) {
     // Créer les arguments pour execve()
-    createArgs(createScriptParams(queryString));
+    createArgv(params);
     // Créer les variables d'environnement pour execve()
     createEnvp(envVars);
     pipefd_[0] = pipefd_[1] = -1;
 }
 
 CgiProcess::~CgiProcess() {
-    cleanupArgs();
+    cleanupArgv();
     cleanupEnvp();
     if (pipefd_[0] != -1) close(pipefd_[0]);
     if (pipefd_[1] != -1) close(pipefd_[1]);
@@ -112,9 +112,7 @@ void CgiProcess::cleanupEnvp() {
 }
 
 
-
-
-void CgiProcess::createArgs(const std::map<std::string, std::string>& scriptParams) {
+void CgiProcess::createArgv(const std::map<std::string, std::string>& scriptParams) {
     // Chemin vers l'interpréteur Python
     std::string pythonInterpreter = "/usr/bin/python3";
     argStrings_.push_back(pythonInterpreter);
@@ -128,6 +126,7 @@ void CgiProcess::createArgs(const std::map<std::string, std::string>& scriptPara
     for (std::map<std::string, std::string>::const_iterator it = scriptParams.begin(); it != scriptParams.end(); ++it) {
         // Format des arguments : --key=value
         std::string arg = "--" + it->first + "=" + it->second;
+        paramDecode(arg);
         argStrings_.push_back(arg);
         args_.push_back(const_cast<char*>(argStrings_.back().c_str()));
     }
@@ -136,7 +135,29 @@ void CgiProcess::createArgs(const std::map<std::string, std::string>& scriptPara
     args_.push_back(NULL);
 }
 
-void CgiProcess::cleanupArgs() {
+void CgiProcess::cleanupArgv() {
     args_.clear();
     argStrings_.clear();
+}
+
+// Fonction pour décoder les caractères encodés au format %hexa dans la query string 
+void CgiProcess::paramDecode(std::string& param) const {
+    std::string decoded;
+    char hex[3];
+    hex[2] = '\0';
+    for (std::string::size_type i = 0; i < param.length(); ++i) {
+        if (param[i] == '%') {
+            if (i + 2 < param.length()) {
+                hex[0] = param[i + 1];
+                hex[1] = param[i + 2];
+                decoded += static_cast<char>(std::strtol(hex, NULL, 16));
+                i += 2;
+            }
+        } else if (param[i] == '+') {
+            decoded += ' ';
+        } else {
+            decoded += param[i];
+        }
+    }
+    param = decoded;
 }

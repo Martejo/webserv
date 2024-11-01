@@ -38,6 +38,9 @@ private:
     HttpResponse handleError(int statusCode, const Server* server) const;
 
     CgiProcess* startCgiProcess(const Server* server, const Location* location, const HttpRequest& request) const;
+    void setupScriptEnvp(const HttpRequest& request, const std::string& relativeFilePath,  std::vector<std::string>& envVars) const;
+    std::map<std::string, std::string> createScriptParamsGET(const std::string& queryString) const;
+    std::map<std::string, std::string> createScriptParamsPOST(const std::string& postData) const;
 
     const Config& config_;
     const std::vector<Server*>& associatedServers_;

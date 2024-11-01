@@ -31,7 +31,6 @@ class HttpRequest {
 
         void parseRequestLine(const std::string& line);
         void parseHeaderLine(const std::string& line);
-        void queryStringDecode();
 
         std::string rawData_;
         std::string method_;

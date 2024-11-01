@@ -89,7 +89,6 @@ void HttpRequest::parseRequestLine(const std::string& line) {
     size_t queryPos = path_.find('?');
     if (queryPos != std::string::npos) {
         queryString_ = path_.substr(queryPos + 1); // Stocker la query string
-        queryStringDecode();//decoder les char hexa contenus dans la querystring
         path_ = path_.substr(0, queryPos); // Garder uniquement la partie avant le '?'
     } else {
         queryString_.clear(); // Aucune query string, on vide la variable
@@ -113,28 +112,6 @@ void HttpRequest::parseHeaderLine(const std::string& line) {
 
         // std::cout << "HttpRequest::parseRequestLine  : Parsed header: " << headerName << " = '" << headerValue << "'"  << std::endl;//test
     }
-}
-
-// Fonction pour décoder les caractères encodés au format %hexa dans la query string 
-void HttpRequest::queryStringDecode() {
-    std::string decoded;
-    char hex[3];
-    hex[2] = '\0';
-    for (std::string::size_type i = 0; i < queryString_.length(); ++i) {
-        if (queryString_[i] == '%') {
-            if (i + 2 < queryString_.length()) {
-                hex[0] = queryString_[i + 1];
-                hex[1] = queryString_[i + 2];
-                decoded += static_cast<char>(std::strtol(hex, NULL, 16));
-                i += 2;
-            }
-        } else if (queryString_[i] == '+') {
-            decoded += ' ';
-        } else {
-            decoded += queryString_[i];
-        }
-    }
-    queryString_ = decoded;
 }
 
 const std::string& HttpRequest::getMethod() const {

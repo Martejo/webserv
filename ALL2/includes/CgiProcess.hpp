@@ -9,7 +9,7 @@
 class CgiProcess {
 public:
     // Modifié le constructeur pour accepter les arguments sous forme de map
-    CgiProcess(const std::string& scriptWorkingDir, const std::string& relativeFilePath, const std::string& queryString, const std::vector<std::string>& envVars);
+    CgiProcess(const std::string& scriptWorkingDir, const std::string& relativeFilePath, const std::map<std::string, std::string>& params, const std::vector<std::string>& envVars);
     ~CgiProcess();
 
     bool start();
@@ -33,10 +33,12 @@ private:
     std::vector<std::string> envStrings_;
 
     // Méthodes pour créer et nettoyer les arguments et l'environnement
-    void createArgs(const std::map<std::string, std::string>& scriptParams);
-    void cleanupArgs();
+    void createArgv(const std::map<std::string, std::string>& scriptParams);
+    void cleanupArgv();
 
     std::map<std::string, std::string> createScriptParams(const std::string& queryString);
+    void paramDecode(std::string& arg) const;
+
     void createEnvp(const std::vector<std::string>& envVars);
     void cleanupEnvp();
 };
