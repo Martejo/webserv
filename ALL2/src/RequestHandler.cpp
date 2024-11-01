@@ -10,6 +10,8 @@
 #include <limits.h>
 #include "../includes/Utils.hpp"
 #include "../includes/Color_Macros.hpp"
+#include <cerrno> // Pour errno
+#include <string.h> // Pour errno
 
 
 RequestHandler::RequestHandler(const Config& config, const std::vector<Server*>& associatedServers)
@@ -22,6 +24,14 @@ RequestHandler::~RequestHandler() {}
 RequestResult RequestHandler::handleRequest(const HttpRequest& request) {
     RequestResult result;
     const Server* server = selectServer(request);
+
+    // Vérifier si le serveur est NULL
+    if (!server) {
+        result.response = handleError(400, NULL);
+        result.responseReady = true;
+        return result;
+    }
+
     const Location* location = selectLocation(server, request);
 
     process(server, location, request, result);
@@ -32,14 +42,14 @@ const Server* RequestHandler::selectServer(const HttpRequest& request) const {
     std::string hostHeader = request.getHeader("Host");
     if (hostHeader.empty()) {
         std::cerr << "No Host header found in the request." << std::endl;
-        return NULL;
+        return NULL; // Retourner NULL pour indiquer une erreur
     }
 
     // Parcourir tous les serveurs pour trouver une correspondance
     for (size_t i = 0; i < associatedServers_.size(); ++i) {
         const std::vector<std::string>& serverNames = associatedServers_[i]->getServerNames();
         if (std::find(serverNames.begin(), serverNames.end(), hostHeader) != serverNames.end()) {
-            std::cerr << "RequestHandler::selectServer   : Server finded by name => first name of server : " << associatedServers_[i]->getServerNames()[0] << " ip:port : "<< associatedServers_[i]->getHost() << ":"<< associatedServers_[i]->getPort() << std::endl; //test
+            std::cerr << "RequestHandler::selectServer   : Server found by name => first name of server : " << associatedServers_[i]->getServerNames()[0] << " ip:port : "<< associatedServers_[i]->getHost() << ":"<< associatedServers_[i]->getPort() << std::endl; //test
             return associatedServers_[i];
         }
     }
@@ -47,16 +57,21 @@ const Server* RequestHandler::selectServer(const HttpRequest& request) const {
     // Si aucun serveur ne correspond, utiliser le premier serveur comme défaut
     if (!associatedServers_.empty()) {
         std::cerr << "RequestHandler::selectServer   : Default server Used => first name of server : " << associatedServers_[0]->getServerNames()[0] << " ip:port : "<< associatedServers_[0]->getHost() << ":"<< associatedServers_[0]->getPort() << std::endl;//test
-        
+
         return associatedServers_[0];
     }
-    
-    std::cerr << "RequestHandler::selectServer   : No server finded == PROBLEM because default must exist"<< std::endl;//test
+
+    std::cerr << "RequestHandler::selectServer   : No server found. Default server must exist." << std::endl;//test
     // Aucun serveur configuré
     return NULL;
 }
 
 const Location* RequestHandler::selectLocation(const Server* server, const HttpRequest& request) const {
+    // Vérifier si le serveur est NULL
+    if (!server) {
+        return NULL;
+    }
+
     std::string requestPath = request.getPath();
     const std::vector<Location>& locations = server->getLocations();
 
@@ -70,13 +85,20 @@ const Location* RequestHandler::selectLocation(const Server* server, const HttpR
             longestMatch = locPath.length();
         }
     }
-    
+
     if(matchedLocation)
-        std::cout << "request Path :"<< request.getPath() <<" Matched location :" <<matchedLocation->getPath() << std::endl;//test
+        std::cout << "Request Path: " << request.getPath() << " Matched location: " << matchedLocation->getPath() << std::endl;//test
     return matchedLocation;
 }
 
 void RequestHandler::process(const Server* server, const Location* location, const HttpRequest& request, RequestResult& result) const {
+    // Vérifier si le serveur est NULL
+    if (!server) {
+        result.response = handleError(400, NULL);
+        result.responseReady = true;
+        return;
+    }
+
     // Method not allowed
     if (location) {
         const std::vector<std::string>& allowedMethods = location->getAllowedMethods();
@@ -129,33 +151,32 @@ void RequestHandler::process(const Server* server, const Location* location, con
     }
 
     // File upload handling
-    if (request.getMethod() == "POST" && location && location->getUploadEnable() && location->getUploadEnable()) {
+    if (request.getMethod() == "POST" && location && location->getUploadEnable()) {
         result.response = handleFileUpload(request, location);
         result.responseReady = true;
         return;
     }
 
-    // Default error
-    std::cout << RED << "RequestHandler::process ERROR "<<YELLOW<< request.getMethod() <<" "<< location<< " "<< location->getUploadEnable() << "" << location->getUploadStore()<< RESET <<std::endl;//debug
-    result.response = handleError(400, server);
+    // Méthode non autorisée
+    result.response = handleError(405, server);
+    // result.response.setHeader("Allow", "GET, POST"); // Mettez les méthodes autorisées
     result.responseReady = true;
 }
 
 CgiProcess* RequestHandler::startCgiProcess(const Server* server, const Location* location , const HttpRequest& request) const {
-    // (void)location;//debug
-    // std::string scriptWorkingDir = server->getRoot();
     char cwd[PATH_MAX];
 
     if (getcwd(cwd, sizeof(cwd)) == NULL) {
-        std::cerr<< RED <<"RequestHandler::startCgiProcess : Error getcwd"<< RESET<<std::endl;
-    } 
+        std::cerr << RED <<"RequestHandler::startCgiProcess : Error getcwd: " << strerror(errno) << RESET << std::endl;
+        return NULL; // Retourner NULL pour indiquer une erreur
+    }
     std::string scriptWorkingDir = cwd ;
     scriptWorkingDir += "/" ;
     scriptWorkingDir += server->getRoot();
     if (location){
         scriptWorkingDir += "/" ;
         scriptWorkingDir += location->getPath();
-        scriptWorkingDir += "/" ;
+        scriptWorkingDir += "/";
     }
     std::string relativeFilePath = request.getPath();
     if (location && relativeFilePath.compare(0, location->getPath().length(), location->getPath()) == 0) {
@@ -183,11 +204,8 @@ CgiProcess* RequestHandler::startCgiProcess(const Server* server, const Location
         return NULL;
     }
 
-
     std::vector<std::string> envVars;
     setupScriptEnvp(request, relativeFilePath, envVars);
-    // std::cout << RED << "CGI scriptP : "<< scriptWorkingDir<< " scriptFileP : "<< relativeFilePath<< RESET << std::endl;//test
-
 
     // Créer l'objet CgiProcess avec les paramètres
     CgiProcess* cgiProcess = new CgiProcess(scriptWorkingDir, relativeFilePath, params, envVars);
@@ -279,6 +297,60 @@ std::map<std::string, std::string> RequestHandler::createScriptParamsPOST(const 
 }
 
 
+// // Fonction pour décoder les caractères encodés en URL
+// std::string RequestHandler::urlDecode(const std::string& str) const {
+//     std::string decoded;
+//     char ch;
+//     int i, ii;
+//     for (i = 0; i < str.length(); ++i) {
+//         if (str[i] != '%') {
+//             if (str[i] == '+')
+//                 decoded += ' ';
+//             else
+//                 decoded += str[i];
+//         } else {
+//             sscanf(str.substr(i + 1, 2).c_str(), "%x", &ii);
+//             ch = static_cast<char>(ii);
+//             decoded += ch;
+//             i = i + 2;
+//         }
+//     }
+//     return decoded;
+// }
+// // Fonction générique pour analyser les paramètres
+// std::map<std::string, std::string> RequestHandler::parseParameters(const std::string& data) const {
+//     std::map<std::string, std::string> params;
+//     std::string::size_type last_pos = 0, amp_pos;
+
+//     while ((amp_pos = data.find('&', last_pos)) != std::string::npos) {
+//         std::string key_value_pair = data.substr(last_pos, amp_pos - last_pos);
+//         std::string::size_type eq_pos = key_value_pair.find('=');
+//         if (eq_pos != std::string::npos) {
+//             std::string key = urlDecode(key_value_pair.substr(0, eq_pos));
+//             std::string value = urlDecode(key_value_pair.substr(eq_pos + 1));
+//             params[key] = value;
+//         } else if (!key_value_pair.empty()) {
+//             params[urlDecode(key_value_pair)] = "";
+//         }
+//         last_pos = amp_pos + 1;
+//     }
+
+//     // Traiter le dernier paramètre
+//     std::string key_value_pair = data.substr(last_pos);
+//     if (!key_value_pair.empty()) {
+//         std::string::size_type eq_pos = key_value_pair.find('=');
+//         if (eq_pos != std::string::npos) {
+//             std::string key = urlDecode(key_value_pair.substr(0, eq_pos));
+//             std::string value = urlDecode(key_value_pair.substr(eq_pos + 1));
+//             params[key] = value;
+//         } else {
+//             params[urlDecode(key_value_pair)] = "";
+//         }
+//     }
+
+//     return params;
+// }
+
 HttpResponse RequestHandler::serveStaticFile(const Server* server, const Location* location, const HttpRequest& request) const 
 {
     HttpResponse response;
@@ -294,6 +366,12 @@ HttpResponse RequestHandler::serveStaticFile(const Server* server, const Locatio
 
     // Construire le chemin complet du fichier demandé
     std::string requestPath = request.getPath();
+
+    // Vérifier que requestPath n'est pas vide
+    if (requestPath.empty()) {
+        requestPath = "/";
+    }
+
     if (requestPath[requestPath.size() - 1] == '/')
     {
         if (location)//debug 
@@ -302,7 +380,7 @@ HttpResponse RequestHandler::serveStaticFile(const Server* server, const Locatio
             return(generateAutoIndex(root + requestPath, requestPath));
         requestPath += index;
     }
-    //retirer la location de requestPath si la directive root est parametree en son sein 
+    // Retirer la location de requestPath si la directive root est paramétrée en son sein 
     if (location && location->getRootIsSet())
     {
         std::string to_remove = location->getPath();
@@ -310,7 +388,6 @@ HttpResponse RequestHandler::serveStaticFile(const Server* server, const Locatio
         if (pos != std::string::npos) {
             requestPath.erase(pos, to_remove.length());
             // std::cout << "Location path removed" << to_remove << std::endl;//test
-
         }
     }
 
@@ -322,11 +399,31 @@ HttpResponse RequestHandler::serveStaticFile(const Server* server, const Locatio
         return handleError(403, server); // Forbidden
     }
 
+    // Vérifier si le fichier existe et est accessible
+    struct stat fileStat;
+    if (stat(fullPath.c_str(), &fileStat) != 0) {
+        if (errno == EACCES) {
+            return handleError(403, server); // Forbidden
+        } else if (errno == ENOENT || errno == ENOTDIR) {
+            return handleError(404, server); // Not Found
+        } else {
+            return handleError(500, server); // Internal Server Error
+        }
+    }
+
+    // Vérifier que c'est un fichier régulier
+    if (!S_ISREG(fileStat.st_mode)) {
+        return handleError(403, server); // Forbidden
+    }
+
     // Ouvrir le fichier demandé
     std::ifstream file(fullPath.c_str(), std::ios::in | std::ios::binary);
     if (!file.is_open()) {
-        std::cout << "File not found: " << fullPath << std::endl;
-        return handleError(404, server); // File Not Found
+        if (errno == EACCES) {
+            return handleError(403, server); // Forbidden
+        } else {
+            return handleError(404, server); // Not Found
+        }
     }
 
     // Lire le contenu du fichier
@@ -356,64 +453,80 @@ HttpResponse RequestHandler::handleFileUpload(const HttpRequest& request, const 
     std::cout << RED << "RequestHandler::handleFileUpload" << RESET << std::endl;//test
     HttpResponse response;
 
-    // Extraire la limite (boundary) de l'en-tête Content-Type
+    // Vérifier que le Content-Type est multipart/form-data
     std::string contentType = request.getHeader("Content-Type");
-    std::string boundary;
+    if (contentType.find("multipart/form-data") != 0) {
+        response.setStatusCode(400);
+        response.setBody("Invalid Content-Type for file upload.");
+        return response;
+    }
+
+    // Extraire la limite (boundary) de l'en-tête Content-Type
     std::string boundaryPrefix = "boundary=";
     std::string::size_type boundaryPos = contentType.find(boundaryPrefix);
     if (boundaryPos != std::string::npos) {
-        boundary = "--" + contentType.substr(boundaryPos + boundaryPrefix.length());
+        boundaryPos += boundaryPrefix.length();
+        std::string boundary = "--" + contentType.substr(boundaryPos);
+
+        // Lire le corps de la requête
+        std::string body = request.getBody();
+
+        // Séparer les différentes parties
+        std::string::size_type start = 0;
+        while ((start = body.find(boundary, start)) != std::string::npos) {
+            start += boundary.length();
+            std::string::size_type end = body.find(boundary, start);
+            if (end == std::string::npos) break;
+
+            std::string part = body.substr(start, end - start);
+
+            // Extraire les en-têtes de la partie
+            std::string::size_type headerEnd = part.find("\r\n\r\n");
+            if (headerEnd == std::string::npos) continue;
+
+            std::string headers = part.substr(0, headerEnd);
+            std::string fileData = part.substr(headerEnd + 4);
+
+            // Vérifier si cette partie est un fichier
+            std::string filenamePrefix = "filename=\"";
+            std::string::size_type filenamePos = headers.find(filenamePrefix);
+            if (filenamePos != std::string::npos) {
+                std::string::size_type filenameEndPos = headers.find("\"", filenamePos + filenamePrefix.length());
+                if (filenameEndPos != std::string::npos) {
+                    std::string filename = headers.substr(filenamePos + filenamePrefix.length(), filenameEndPos - (filenamePos + filenamePrefix.length()));
+
+                    // Construire le chemin complet pour sauvegarder le fichier
+                    std::string uploadDirectory = location->getUploadStore();  // Obtenir le répertoire d'upload depuis la configuration
+                    std::string fullPath = uploadDirectory + "/" + filename;
+
+                    // Vérifier que le répertoire d'upload existe
+                    struct stat dirStat;
+                    if (stat(uploadDirectory.c_str(), &dirStat) != 0 || !S_ISDIR(dirStat.st_mode)) {
+                        std::cerr << "Upload directory does not exist: " << uploadDirectory << std::endl;
+                        response.setStatusCode(500);
+                        response.setBody("Upload directory does not exist.");
+                        return response;
+                    }
+
+                    // Sauvegarder le fichier
+                    std::ofstream file(fullPath.c_str(), std::ios::binary);
+                    if (file.is_open()) {
+                        file.write(fileData.c_str(), fileData.size());
+                        file.close();
+                        std::cout << "File saved: " << fullPath << std::endl;
+                    } else {
+                        std::cerr << "Failed to save file: " << fullPath << std::endl;
+                        response.setStatusCode(500);
+                        response.setBody("Failed to save file.");
+                        return response;
+                    }
+                }
+            }
+        }
     } else {
         response.setStatusCode(400);
         response.setBody("No boundary found in multipart request.");
         return response;
-    }
-
-    // Lire le corps de la requête
-    std::string body = request.getBody();
-
-    // Séparer les différentes parties
-    std::string::size_type start = 0;
-    while ((start = body.find(boundary, start)) != std::string::npos) {
-        start += boundary.length();
-        std::string::size_type end = body.find(boundary, start);
-        if (end == std::string::npos) break;
-
-        std::string part = body.substr(start, end - start);
-
-        // Extraire les en-têtes de la partie
-        std::string::size_type headerEnd = part.find("\r\n\r\n");
-        if (headerEnd == std::string::npos) continue;
-
-        std::string headers = part.substr(0, headerEnd);
-        std::string fileData = part.substr(headerEnd + 4);
-
-        // Vérifier si cette partie est un fichier
-        std::string filenamePrefix = "filename=\"";
-        std::string::size_type filenamePos = headers.find(filenamePrefix);
-        if (filenamePos != std::string::npos) {
-            std::string::size_type filenameEndPos = headers.find("\"", filenamePos + filenamePrefix.length());
-            if (filenameEndPos != std::string::npos) {
-                std::string filename = headers.substr(filenamePos + filenamePrefix.length(), filenameEndPos - (filenamePos + filenamePrefix.length()));
-
-                // Construire le chemin complet pour sauvegarder le fichier
-                std::string uploadDirectory = location->getUploadStore();  // Obtenir le répertoire d'upload depuis la configuration
-                std::string fullPath = uploadDirectory + "/" + filename;
-
-                // Sauvegarder le fichier
-                std::ofstream file(fullPath.c_str(), std::ios::binary);
-                if (file.is_open()) {
-                    file.write(fileData.c_str(), fileData.size());
-                    file.close();
-                    std::cout << "File saved: " << fullPath << std::endl;
-                } else {
-                    std::cerr << "Failed to save file: " << fullPath << std::endl;
-                    response.setStatusCode(500);
-                    response.setBody("Failed to save file.");
-                    return response;
-                }
-            }
-        }
     }
 
     response.setStatusCode(200);
@@ -424,7 +537,7 @@ HttpResponse RequestHandler::handleFileUpload(const HttpRequest& request, const 
 HttpResponse RequestHandler::generateAutoIndex(const std::string& fullPath, const std::string& requestPath) const {
     std::cout << RED << "RequestHandler::generateAutoIndex" << RESET << std::endl; // test
     std::stringstream ss;
-    
+
     // Génération du contenu HTML
     ss << "<html><head><title>Index of " << requestPath << "</title></head><body>";
     ss << "<h1>Index of " << requestPath << "</h1><ul>";
@@ -490,8 +603,6 @@ bool RequestHandler::isPathSecure(const std::string& root, const std::string& fu
     std::string realRootStr(realRoot);
     std::string realFullPathStr(realFullPath);
 
-    // std::cout << "REAL ROOT :" << realRootStr << " realFullPath :" << realFullPath <<std::endl; //test
-
     // Vérifier que fullPath commence par root
     if (realFullPathStr.find(realRootStr) != 0) {
         std::cerr << "Path traversal attempt detected: " << fullPath << std::endl;
@@ -513,11 +624,20 @@ HttpResponse RequestHandler::handleError(int statusCode, const Server* server) c
         // Récupérer depuis la configuration globale si aucun serveur n'est spécifié
         errorPageUri = config_.getErrorPage(statusCode);
     }
+
     if (!errorPageUri.empty()) {
         // Construire le chemin complet de la page d'erreur
-        std::string errorPagePath = "/home/kali/Desktop/42/webserv/ALL2/" + server->getRoot() + errorPageUri;
+        std::string root = (server) ? server->getRoot() : config_.getRoot();
+        std::string errorPagePath = root + errorPageUri;
+
+        // Vérifier que le chemin est sécurisé
+        if (!isPathSecure(root, errorPagePath)) {
+            response.setBody("Error " + toString(statusCode));
+            response.setHeader("Content-Type", "text/html");
+            return response;
+        }
+
         std::ifstream errorFile(errorPagePath.c_str(), std::ios::in | std::ios::binary);
-        std::cout << CYAN << errorPagePath << std::endl; //debug
         if (errorFile.is_open()) {
             std::stringstream buffer;
             buffer << errorFile.rdbuf();
@@ -525,8 +645,7 @@ HttpResponse RequestHandler::handleError(int statusCode, const Server* server) c
             errorFile.close();
             response.setBody(errorContent);
         } else {
-            std::cout << CYAN << "errorFile not opened" << std::endl; //debug
-            response.setBody("Error " + ::toString(statusCode));
+            response.setBody("Error " + toString(statusCode));
         }
     } else {
         // Message d'erreur par défaut
