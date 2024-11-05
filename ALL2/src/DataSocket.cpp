@@ -9,16 +9,21 @@
 
 DataSocket::DataSocket(int fd, const std::vector<Server*>& servers, const Config& config)
     : client_fd_(fd), associatedServers_(servers), requestComplete_(false), config_(config),
-      sendBufferOffset_(0), cgiProcess_(NULL), cgiPipeFd_(-1), cgiComplete_(true) {
+      sendBufferOffset_(0), cgiProcess_(NULL), cgiPipeFd_(-1), cgiComplete_(true),
+      startTime_(time(NULL)), maxLifetime_(12) // Par exemple, 12 secondes
+{
 }
 
 DataSocket::~DataSocket() {
     closeSocket();
-    if (cgiProcess_) {
-        delete cgiProcess_;
-        cgiProcess_ = NULL;
-    }
+    closeCgiPipe();
 }
+
+bool DataSocket::hasTimedOut() const {
+    time_t currentTime = time(NULL);
+    return difftime(currentTime, startTime_) > maxLifetime_;
+}
+
 
 bool DataSocket::receiveData() {
     char buffer[4096];
@@ -120,14 +125,16 @@ bool DataSocket::isCgiComplete() const {
 }
 
 void DataSocket::readFromCgiPipe() {
+    std::cout << RED << "DataSocket::readFromCgiPipe()" << RESET << std::endl; // Debug
+
     char buffer[4096];
     ssize_t bytesRead = read(cgiPipeFd_, buffer, sizeof(buffer));
-    // std::cout << "DataSocket::readFromCgiPipe bytesread = "<< bytesRead << std::endl;//test
+
     if (bytesRead > 0) {
         cgiOutputBuffer_.append(buffer, bytesRead);
+        std::cout << BLUE << "CGI added buffer: " << std::string(buffer, bytesRead) << RESET << std::endl; // Debug
     } else if (bytesRead == 0) {
-        // std::cout << "DataSocket::readFromCgiPipe EOF reached" << std::endl;//test
-        // EOF reached, CGI process finished
+        // EOF atteint, le processus CGI a terminé
         closeCgiPipe();
 
         HttpResponse response;
@@ -137,16 +144,25 @@ void DataSocket::readFromCgiPipe() {
         sendBuffer_ = response.generateResponse();
         sendBufferOffset_ = 0;
         cgiOutputBuffer_.clear();
-    } 
-    // else {
-    // if (errno == EAGAIN || errno == EWOULDBLOCK) {
-    //     std::cerr << "DataSocket::readFromCgiPipe: Resource temporarily unavailable, retrying..." << std::endl;
-    //     // Optionnel : ajouter une petite pause avant de réessayer
-    // } else {
-    //     std::cerr << "DataSocket::readFromCgiPipe Error occurred: " << strerror(errno) << std::endl; // Test
-    //     closeCgiPipe();
-    // }
-    // }
+    } else {
+        // bytesRead < 0, une erreur s'est produite
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            // Aucune donnée disponible pour le moment
+            // Nous pouvons attendre plus de données
+        } else {
+            // Une erreur réelle s'est produite lors de la lecture
+            std::cerr << "DataSocket::readFromCgiPipe Error occurred: " << strerror(errno) << std::endl;
+            closeCgiPipe();
+
+            HttpResponse response;
+            response.setStatusCode(500);
+            response.setBody("Internal Server Error");
+            response.setHeader("Content-Type", "text/html; charset=UTF-8");
+            sendBuffer_ = response.generateResponse();
+            sendBufferOffset_ = 0;
+            cgiOutputBuffer_.clear();
+        }
+    }
 }
 
 void DataSocket::closeCgiPipe() {

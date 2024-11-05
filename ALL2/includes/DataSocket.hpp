@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <string>
+#include <ctime>
 #include "Server.hpp"
 #include "Config.hpp"
 #include "HttpRequest.hpp"
@@ -22,27 +23,34 @@ public:
     void closeSocket();
     int getSocket() const;
 
+    // CGI handling methods
     bool hasCgiProcess() const;
     int getCgiPipeFd() const;
     bool isCgiComplete() const;
     void readFromCgiPipe();
     void closeCgiPipe();
 
+    // Timeout handling
+    bool hasTimedOut() const;
+
 private:
     int client_fd_;
     std::vector<Server*> associatedServers_;
     HttpRequest httpRequest_;
     bool requestComplete_;
-    const Config& config_;
-
+    Config config_;
     std::string sendBuffer_;
     size_t sendBufferOffset_;
 
-    // CGI handling
+    // CGI
     CgiProcess* cgiProcess_;
     int cgiPipeFd_;
     bool cgiComplete_;
     std::string cgiOutputBuffer_;
+
+    // Timeout
+    time_t startTime_;
+    int maxLifetime_;
 };
 
 #endif // DATASOCKET_HPP

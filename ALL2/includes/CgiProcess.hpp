@@ -32,6 +32,10 @@ private:
     std::vector<std::string> argStrings_;
     std::vector<std::string> envStrings_;
 
+    // Gerer le temps d' execution max 
+    time_t startTime_;
+    int maxExecutionTime_;
+
     // Méthodes pour créer et nettoyer les arguments et l'environnement
     void createArgv(const std::map<std::string, std::string>& scriptParams);
     void cleanupArgv();
