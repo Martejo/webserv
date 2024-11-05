@@ -35,7 +35,7 @@ private:
     HttpResponse generateAutoIndex(const std::string& fullPath, const std::string& requestPath) const;
     std::string getMimeType(const std::string& extension) const;
     bool isPathSecure(const std::string& root, const std::string& fullPath) const;
-    HttpResponse handleError(int statusCode, const Server* server) const;
+    // HttpResponse handleError(int statusCode, const Server* server) const;
 
     CgiProcess* startCgiProcess(const Server* server, const Location* location, const HttpRequest& request) const;
     void setupScriptEnvp(const HttpRequest& request, const std::string& relativeFilePath,  std::vector<std::string>& envVars) const;

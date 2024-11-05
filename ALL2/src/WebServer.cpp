@@ -183,10 +183,20 @@ void WebServer::runEventLoop() {
             // Socket client
             struct pollfd pfd;
             pfd.fd = dataSocket->getSocket();
-            pfd.events = POLLIN;
-            if (dataSocket->hasDataToSend()) {
-                pfd.events |= POLLOUT;
+            pfd.events = 0;
+
+            if (dataSocket->getState() == SOCKET_ERROR_TIMEOUT) {
+                // La socket a une erreur de timeout, il faut envoyer la réponse 504
+                if (dataSocket->hasDataToSend()) {
+                    pfd.events |= POLLOUT;
+                }
+            } else {
+                pfd.events |= POLLIN;
+                if (dataSocket->hasDataToSend()) {
+                    pfd.events |= POLLOUT;
+                }
             }
+
             pfd.revents = 0;
             pollfds.push_back(pfd);
             pollListeningSockets.push_back(NULL); // Pas de ListeningSocket pour les DataSocket
@@ -231,20 +241,31 @@ void WebServer::runEventLoop() {
             } else if (pollFdTypes[i] == 1) {
                 // Socket client
                 DataSocket* dataSocket = pollDataSockets[i];
-                if (pollfds[i].revents & POLLIN) {
-                    if (!dataSocket->receiveData()) {
-                        dataSocket->closeSocket();
-                    } else if (dataSocket->isRequestComplete()) {
-                        dataSocket->processRequest();
+                if (dataSocket->getState() == SOCKET_ERROR_TIMEOUT) {
+                    if (pollfds[i].revents & POLLOUT) {
+                        if (!dataSocket->sendData()) {
+                            dataSocket->closeSocket();
+                        }
                     }
-                }
-                if (pollfds[i].revents & POLLOUT) {
-                    if (!dataSocket->sendData()) {
+                    if (pollfds[i].revents & (POLLHUP | POLLERR | POLLNVAL)) {
                         dataSocket->closeSocket();
                     }
-                }
-                if (pollfds[i].revents & (POLLHUP | POLLERR | POLLNVAL)) {
-                    dataSocket->closeSocket();
+                } else {
+                    if (pollfds[i].revents & POLLIN) {
+                        if (!dataSocket->receiveData()) {
+                            dataSocket->closeSocket();
+                        } else if (dataSocket->isRequestComplete()) {
+                            dataSocket->processRequest();
+                        }
+                    }
+                    if (pollfds[i].revents & POLLOUT) {
+                        if (!dataSocket->sendData()) {
+                            dataSocket->closeSocket();
+                        }
+                    }
+                    if (pollfds[i].revents & (POLLHUP | POLLERR | POLLNVAL)) {
+                        dataSocket->closeSocket();
+                    }
                 }
             } else if (pollFdTypes[i] == 2) {
                 // Pipe CGI
@@ -269,8 +290,10 @@ void WebServer::runEventLoop() {
         for (size_t j = 0; j < allDataSockets.size(); ++j) {
             DataSocket* dataSocket = allDataSockets[j];
             if (dataSocket->hasTimedOut()) {
-                std::cerr << "DataSocket timed out, closing socket." << std::endl;
-                dataSocket->closeSocket();
+                if (dataSocket->getState() != SOCKET_ERROR_TIMEOUT) {
+                    std::cerr << "DataSocket timed out, sending 504 Gateway Timeout." << std::endl;
+                    dataSocket->handleTimeout();
+                }
             }
         }
 

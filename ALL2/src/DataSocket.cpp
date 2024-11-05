@@ -10,18 +10,43 @@
 DataSocket::DataSocket(int fd, const std::vector<Server*>& servers, const Config& config)
     : client_fd_(fd), associatedServers_(servers), requestComplete_(false), config_(config),
       sendBufferOffset_(0), cgiProcess_(NULL), cgiPipeFd_(-1), cgiComplete_(true),
-      startTime_(time(NULL)), maxLifetime_(12) // Par exemple, 12 secondes
+      startTime_(time(NULL)), maxLifetime_(15), state_(SOCKET_READY)
 {
 }
 
 DataSocket::~DataSocket() {
     closeSocket();
-    closeCgiPipe();
+    if (cgiProcess_) {
+        delete cgiProcess_;
+        cgiProcess_ = NULL;
+    }
 }
 
 bool DataSocket::hasTimedOut() const {
     time_t currentTime = time(NULL);
     return difftime(currentTime, startTime_) > maxLifetime_;
+}
+
+void DataSocket::handleTimeout() {
+    // Fermer le processus CGI s'il est en cours
+    if (cgiProcess_) {
+        closeCgiPipe();
+    }
+
+    // Générer la réponse 504 Gateway Timeout
+    HttpResponse response;
+    response.setStatusCode(504);
+    response.setBody("Gateway Timeout");
+    response.setHeader("Content-Type", "text/html; charset=UTF-8");
+    sendBuffer_ = response.generateResponse();
+    sendBufferOffset_ = 0;
+
+    // Mettre à jour l'état
+    state_ = SOCKET_ERROR_TIMEOUT;
+}
+
+DataSocketState DataSocket::getState() const {
+    return state_;
 }
 
 
@@ -70,20 +95,24 @@ void DataSocket::processRequest() {
 }
 
 bool DataSocket::sendData() {
-    // std::cout << "DataSocket::sendData" <<std::endl;//test
     if (sendBuffer_.empty()) {
         return true;
     }
 
-    // Imprimer le contenu de sendBuffer_ qui sera envoyé
-    // std::cout << YELLOW << sendBuffer_.substr(sendBufferOffset_) << RESET << std::endl;//debug test
-    std::cout << YELLOW <<  "send data"<< RESET << std::endl;//debug test
     ssize_t bytesSent = send(client_fd_, sendBuffer_.c_str() + sendBufferOffset_, sendBuffer_.size() - sendBufferOffset_, 0);
     if (bytesSent > 0) {
         sendBufferOffset_ += bytesSent;
         if (sendBufferOffset_ >= sendBuffer_.size()) {
             sendBuffer_.clear();
             sendBufferOffset_ = 0;
+
+            if (state_ == SOCKET_ERROR_TIMEOUT) {
+                closeSocket();
+                return false;
+            }
+
+            // Si vous souhaitez fermer la connexion après l'envoi de la réponse
+            // closeSocket();
             return true;
         }
     } else if (bytesSent == 0) {
