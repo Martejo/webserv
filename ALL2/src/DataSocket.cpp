@@ -2,6 +2,7 @@
 #include "DataSocket.hpp"
 #include "RequestHandler.hpp"
 #include "Color_Macros.hpp"
+#include "Error.hpp"
 #include <unistd.h>
 #include <iostream>
 #include <errno.h>//debug
@@ -154,6 +155,36 @@ void DataSocket::readFromCgiPipe() {
                 sendBufferOffset_ = 0;
                 cgiOutputBuffer_.clear();
             }
+    }
+}
+
+bool DataSocket::cgiProcessIsRunning() const {
+    if (cgiProcess_) {
+        return cgiProcess_->isRunning();
+    }
+    return false;
+}
+
+bool DataSocket::cgiProcessHasTimedOut() const {
+    if (cgiProcess_) {
+        return cgiProcess_->hasTimedOut();
+    }
+    return false;
+}
+
+void DataSocket::terminateCgiProcess() {
+    if (cgiProcess_) {
+        cgiProcess_->terminate();
+        closeCgiPipe();
+        // Envoyer une réponse d'erreur au client
+        HttpResponse response = handleError(500, associatedServers_[0]);//test
+        // HttpResponse response;
+        // response.setStatusCode(500);
+        // response.setBody("Internal Server Error (CGI timeout)");
+        // response.setHeader("Content-Type", "text/html; charset=UTF-8");
+        sendBuffer_ = response.generateResponse();
+        sendBufferOffset_ = 0;
+        cgiOutputBuffer_.clear();
     }
 }
 

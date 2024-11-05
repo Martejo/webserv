@@ -2,44 +2,54 @@
 Situations possibles :
 
 Requête malformée : Le client envoie une requête HTTP avec une syntaxe incorrecte, ce qui empêche le serveur de la comprendre. Par exemple, une ligne de requête incomplète ou des en-têtes mal formatés.
+echo -e "GET / HTTP/1.1\nHost: 127.0.0.1:9090\n\n" | nc 127.0.0.1 9090
+curl -v http://127.0.0.1:9090 -H "Host:"
 
 En-têtes invalides : Les en-têtes de la requête contiennent des valeurs invalides ou incohérentes, comme un en-tête Content-Length négatif ou non numérique.
+curl -v -X POST http://127.0.0.1:9090 -H "Content-Length: -10" -d "test"
 
 Encodage incorrect : Le corps de la requête est encodé dans un format que le serveur ne peut pas décoder, ou l'en-tête Content-Encoding spécifie un encodage non supporté.
+curl -v http://127.0.0.1:9090 -H "Content-Encoding: unsupported-encoding"
 
 Requête trop longue : La requête dépasse la taille maximale que le serveur est configuré pour accepter.
+curl -v -X POST http://127.0.0.1:9090 -d "$(head -c 1000000 /dev/urandom | base64)"
 
 2. 401 Unauthorized (401 - Non autorisé)
 Situations possibles :
 
 Authentification requise : Si vous implémentez une protection par authentification pour certaines ressources, le serveur renverra ce code lorsque le client n'a pas fourni de credentials valides.
+curl -v http://127.0.0.1:9090/protected-resource
 
 Accès à des ressources protégées : Le client tente d'accéder à une page ou un fichier nécessitant une authentification, mais les informations d'authentification sont manquantes ou invalides.
+curl -v http://127.0.0.1:9090/protected-resource --user fakeuser:fakepassword
 
 3. 403 Forbidden (403 - Accès interdit)
 Situations possibles :
 
-Accès interdit par configuration : Le serveur est configuré pour interdire l'accès à certaines ressources ou répertoires. Par exemple, le client tente d'accéder à un dossier dont l'accès est bloqué.
-
 Permissions de fichier insuffisantes : Les permissions du système de fichiers empêchent le serveur de lire le fichier demandé, même si le chemin est correct.
+chmod 000 /chemin/vers/webroot/secret.html
+curl -v http://127.0.0.1:9090/secret.html
 
 Interdiction de lister le contenu : Si l'autoindex est désactivé pour un répertoire et qu'il n'y a pas de fichier d'index (comme index.html), le serveur peut renvoyer une erreur 403.
+curl -v http://127.0.0.1:9090/private-directory/
 
 4. 404 Not Found (404 - Page non trouvée)
 Situations possibles :
 
 Ressource inexistante : Le client demande une page, un fichier ou une ressource qui n'existe pas sur le serveur.
+curl -v http://127.0.0.1:9090/nonexistent-page.html
 
 Chemin incorrect : L'URL fournie par le client est incorrecte ou contient des erreurs de frappe.
-
-Fichier supprimé ou déplacé : La ressource a été déplacée ou supprimée, et le serveur n'a pas été mis à jour pour refléter ce changement.
+curl -v http://127.0.0.1:9090/wrongpath/
 
 5. 405 Method Not Allowed (405 - Méthode non autorisée)
 Situations possibles :
 
 Méthode HTTP non supportée : Le client utilise une méthode HTTP (comme PUT, DELETE, PATCH) que le serveur ne reconnaît pas ou n'accepte pas pour la ressource demandée.
+curl -v -X TRACE http://127.0.0.1:9090/
 
 Restriction sur les méthodes : Le serveur est configuré pour n'accepter que certaines méthodes pour une ressource donnée. Par exemple, une page qui n'accepte que GET et HEAD, et le client envoie une requête POST.
+curl -v -X DELETE http://127.0.0.1:9090/index.html
 
 6. 408 Request Timeout (408 - Délai d'attente dépassé)
 Situations possibles :

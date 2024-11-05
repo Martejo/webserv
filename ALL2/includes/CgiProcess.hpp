@@ -13,9 +13,12 @@ public:
     ~CgiProcess();
 
     bool start();
-    bool isRunning() const;
+    bool isRunning();
     int getPipeFd() const;
     std::string readOutput();
+
+    bool hasTimedOut() const;
+    void terminate();
 
 private:
     pid_t pid_;

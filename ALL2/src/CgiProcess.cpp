@@ -78,22 +78,28 @@ bool CgiProcess::start() {
     return true;
 }
 
-bool CgiProcess::isRunning() const {
-    std::cout << RED << "CgiProcess::isRunning" << std::endl;//debug
+bool CgiProcess::hasTimedOut() const {
+    time_t currentTime = time(NULL);
+    return difftime(currentTime, startTime_) > maxExecutionTime_;
+}
+
+void CgiProcess::terminate() {
+    if (pid_ > 0) {
+        kill(pid_, SIGKILL);
+        waitpid(pid_, NULL, 0); // Éviter les processus zombies
+        pid_ = -1;
+    }
+} 
+
+bool CgiProcess::isRunning() {
     int status;
     pid_t result = waitpid(pid_, &status, WNOHANG);
     if (result == 0) {
         // Le processus est toujours en cours d'exécution
-        time_t currentTime = time(NULL);
-        if (difftime(currentTime, startTime_) > maxExecutionTime_) {
-            // Le processus a dépassé le temps maximal autorisé
-            kill(pid_, SIGKILL); // Terminer le processus CGI
-            std::cerr << "CGI process terminated due to timeout." << std::endl;
-            return false;
-        }
         return true;
     } else {
         // Le processus est terminé
+        pid_ = -1; // Mettre à jour pid_ pour indiquer que le processus n'est plus actif
         return false;
     }
 }

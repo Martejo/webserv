@@ -90,11 +90,14 @@ void WebServer::runEventLoop() {
         }
 
         // Appel à poll()
-        int ret = poll(&pollfds[0], pollfds.size(), -1);
+        int timeout = 1000; // Temps ms avant de sortir de l' etat de poll
+        int ret = poll(&pollfds[0], pollfds.size(), timeout);
         if (ret < 0) {
             // perror("poll");
             break;
         }
+
+        checkCgiTimeouts();//verif si les timeouts ce sont declenches avant d' entrer dans poll
 
         // Traitement des événements
         for (i = 0; i < pollfds.size(); ++i) {
@@ -119,6 +122,9 @@ void WebServer::runEventLoop() {
                         dataSocket->closeSocket();
                     } else if (dataSocket->isRequestComplete()) {
                         dataSocket->processRequest();
+                        if (dataSocket->hasCgiProcess()) {
+                            activeCgiSockets_.push_back(dataSocket);
+                        }
                     }
                 }
                 if (pollfds[i].revents & POLLOUT) {
@@ -149,6 +155,29 @@ void WebServer::runEventLoop() {
 
         // Nettoyage des sockets fermées
         dataHandler_.removeClosedSockets();
+    }
+}
+
+void WebServer::checkCgiTimeouts() {
+    std::vector<DataSocket*>::iterator it = activeCgiSockets_.begin();
+    while (it != activeCgiSockets_.end()) {
+        DataSocket* dataSocket = *it;
+        std::cout << "WebServer::checkCgiTimeouts" << std::endl; // le programme n' arrive jamais ici
+        if (dataSocket->hasCgiProcess()) {
+            if (!dataSocket->cgiProcessIsRunning()) {
+                // Le processus CGI n'est plus en cours d'exécution
+                it = activeCgiSockets_.erase(it);
+            } else if (dataSocket->cgiProcessHasTimedOut()) {
+                // Le processus CGI a dépassé le délai maximal
+                dataSocket->terminateCgiProcess();
+                it = activeCgiSockets_.erase(it);
+            } else {
+                ++it;
+            }
+        } else {
+            // Le DataSocket n'a plus de processus CGI
+            it = activeCgiSockets_.erase(it);
+        }
     }
 }
 
