@@ -2,7 +2,6 @@
 #include "DataSocket.hpp"
 #include "RequestHandler.hpp"
 #include "Color_Macros.hpp"
-#include "Error.hpp"
 #include <unistd.h>
 #include <iostream>
 #include <errno.h>//debug
@@ -10,9 +9,7 @@
 
 DataSocket::DataSocket(int fd, const std::vector<Server*>& servers, const Config& config)
     : client_fd_(fd), associatedServers_(servers), requestComplete_(false), config_(config),
-      sendBufferOffset_(0), cgiProcess_(NULL), cgiPipeFd_(-1), cgiComplete_(true),
-      startTime_(time(NULL)), maxLifetime_(1), state_(SOCKET_READY)
-{
+      sendBufferOffset_(0), cgiProcess_(NULL), cgiPipeFd_(-1), cgiComplete_(true) {
 }
 
 DataSocket::~DataSocket() {
@@ -22,35 +19,6 @@ DataSocket::~DataSocket() {
         cgiProcess_ = NULL;
     }
 }
-
-bool DataSocket::hasTimedOut() const {
-    time_t currentTime = time(NULL);
-    return difftime(currentTime, startTime_) > maxLifetime_;
-}
-
-void DataSocket::handleTimeout() {
-    // Fermer le processus CGI s'il est en cours
-    if (cgiProcess_) {
-        closeCgiPipe();
-    }
-
-    // Générer la réponse 504 Gateway Timeout
-    // HttpResponse response = handleError(504, associatedServers_[0]);
-    HttpResponse response;
-    response.setStatusCode(504);
-    response.setBody("Gateway Timeout");
-    response.setHeader("Content-Type", "text/html; charset=UTF-8");
-    sendBuffer_ = response.generateResponse();
-    sendBufferOffset_ = 0;
-
-    // Mettre à jour l'état
-    state_ = SOCKET_ERROR_TIMEOUT;
-}
-
-DataSocketState DataSocket::getState() const {
-    return state_;
-}
-
 
 bool DataSocket::receiveData() {
     char buffer[4096];
@@ -97,24 +65,20 @@ void DataSocket::processRequest() {
 }
 
 bool DataSocket::sendData() {
+    // std::cout << "DataSocket::sendData" <<std::endl;//test
     if (sendBuffer_.empty()) {
         return true;
     }
 
+    // Imprimer le contenu de sendBuffer_ qui sera envoyé
+    // std::cout << YELLOW << sendBuffer_.substr(sendBufferOffset_) << RESET << std::endl;//debug test
+    std::cout << YELLOW <<  "send data"<< RESET << std::endl;//debug test
     ssize_t bytesSent = send(client_fd_, sendBuffer_.c_str() + sendBufferOffset_, sendBuffer_.size() - sendBufferOffset_, 0);
     if (bytesSent > 0) {
         sendBufferOffset_ += bytesSent;
         if (sendBufferOffset_ >= sendBuffer_.size()) {
             sendBuffer_.clear();
             sendBufferOffset_ = 0;
-
-            if (state_ == SOCKET_ERROR_TIMEOUT) {
-                closeSocket();
-                return false;
-            }
-
-            // Si vous souhaitez fermer la connexion après l'envoi de la réponse
-            // closeSocket();
             return true;
         }
     } else if (bytesSent == 0) {
@@ -157,7 +121,7 @@ bool DataSocket::isCgiComplete() const {
 
 void DataSocket::readFromCgiPipe() {
     std::cout << RED << "DataSocket::readFromCgiPipe()" << RESET << std::endl; // Debug
-
+    
     char buffer[4096];
     ssize_t bytesRead = read(cgiPipeFd_, buffer, sizeof(buffer));
 
@@ -177,22 +141,19 @@ void DataSocket::readFromCgiPipe() {
         cgiOutputBuffer_.clear();
     } else {
         // bytesRead < 0, une erreur s'est produite
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            // Aucune donnée disponible pour le moment
-            // Nous pouvons attendre plus de données
-        } else {
-            // Une erreur réelle s'est produite lors de la lecture
-            std::cerr << "DataSocket::readFromCgiPipe Error occurred: " << strerror(errno) << std::endl;
-            closeCgiPipe();
+        if (!cgiProcess_->isRunning()) {
+                // Le processus CGI s'est terminé sans envoyer EOF
+                std::cerr << "CGI process terminated without sending EOF." << std::endl;
+                closeCgiPipe();
 
-            HttpResponse response;
-            response.setStatusCode(500);
-            response.setBody("Internal Server Error");
-            response.setHeader("Content-Type", "text/html; charset=UTF-8");
-            sendBuffer_ = response.generateResponse();
-            sendBufferOffset_ = 0;
-            cgiOutputBuffer_.clear();
-        }
+                HttpResponse response;
+                response.setStatusCode(500);
+                response.setBody("Internal Server Error");
+                response.setHeader("Content-Type", "text/html; charset=UTF-8");
+                sendBuffer_ = response.generateResponse();
+                sendBufferOffset_ = 0;
+                cgiOutputBuffer_.clear();
+            }
     }
 }
 

@@ -1,4 +1,3 @@
-// CgiProcess.cpp
 #include "CgiProcess.hpp"
 #include "Color_Macros.hpp"
 #include <unistd.h>
@@ -9,15 +8,15 @@
 #include <errno.h>
 #include <cstring> // Pour strerror()
 
-CgiProcess::CgiProcess(const std::string& scriptWorkingDir, const std::string& relativeFilePath, const std::map<std::string, std::string>& params, const std::vector<std::string>& envVars)
-    : pid_(-1), scriptWorkingDir_(scriptWorkingDir), relativeFilePath_(relativeFilePath) {
-    // Créer les arguments pour execve()
-    createArgv(params);
-    // Créer les variables d'environnement pour execve()
+CgiProcess::CgiProcess(const std::string& scriptWorkingDir, const std::string& relativeFilePath,
+                       const std::map<std::string, std::string>& scriptParams,
+                       const std::vector<std::string>& envVars)
+    : pid_(-1), scriptWorkingDir_(scriptWorkingDir), relativeFilePath_(relativeFilePath), maxExecutionTime_(11)
+{
+    createArgv(scriptParams);
     createEnvp(envVars);
     pipefd_[0] = pipefd_[1] = -1;
 }
-
 CgiProcess::~CgiProcess() {
     cleanupArgv();
     cleanupEnvp();
@@ -75,13 +74,28 @@ bool CgiProcess::start() {
 
     // Fermer le descripteur d'écriture inutilisé
     close(pipefd_[1]);
-
+    startTime_ = time(NULL);
     return true;
 }
 
 bool CgiProcess::isRunning() const {
+    std::cout << RED << "CgiProcess::isRunning" << std::endl;//debug
     int status;
-    return waitpid(pid_, &status, WNOHANG) == 0;
+    pid_t result = waitpid(pid_, &status, WNOHANG);
+    if (result == 0) {
+        // Le processus est toujours en cours d'exécution
+        time_t currentTime = time(NULL);
+        if (difftime(currentTime, startTime_) > maxExecutionTime_) {
+            // Le processus a dépassé le temps maximal autorisé
+            kill(pid_, SIGKILL); // Terminer le processus CGI
+            std::cerr << "CGI process terminated due to timeout." << std::endl;
+            return false;
+        }
+        return true;
+    } else {
+        // Le processus est terminé
+        return false;
+    }
 }
 
 int CgiProcess::getPipeFd() const {
