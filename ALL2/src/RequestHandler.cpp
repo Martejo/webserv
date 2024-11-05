@@ -9,6 +9,7 @@
 #include <iostream>
 #include <limits.h>
 #include "../includes/Utils.hpp"
+#include "../includes/Error.hpp"
 #include "../includes/Color_Macros.hpp"
 #include <cerrno> // Pour errno
 #include <string.h> // Pour errno

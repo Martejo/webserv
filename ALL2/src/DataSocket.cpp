@@ -2,6 +2,7 @@
 #include "DataSocket.hpp"
 #include "RequestHandler.hpp"
 #include "Color_Macros.hpp"
+#include "Error.hpp"
 #include <unistd.h>
 #include <iostream>
 #include <errno.h>//debug
@@ -10,7 +11,7 @@
 DataSocket::DataSocket(int fd, const std::vector<Server*>& servers, const Config& config)
     : client_fd_(fd), associatedServers_(servers), requestComplete_(false), config_(config),
       sendBufferOffset_(0), cgiProcess_(NULL), cgiPipeFd_(-1), cgiComplete_(true),
-      startTime_(time(NULL)), maxLifetime_(15), state_(SOCKET_READY)
+      startTime_(time(NULL)), maxLifetime_(1), state_(SOCKET_READY)
 {
 }
 
@@ -34,6 +35,7 @@ void DataSocket::handleTimeout() {
     }
 
     // Générer la réponse 504 Gateway Timeout
+    // HttpResponse response = handleError(504, associatedServers_[0]);
     HttpResponse response;
     response.setStatusCode(504);
     response.setBody("Gateway Timeout");
