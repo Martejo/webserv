@@ -42,6 +42,12 @@ private:
     std::map<std::string, std::string> createScriptParamsGET(const std::string& queryString) const;
     std::map<std::string, std::string> createScriptParamsPOST(const std::string& postData) const;
 
+    //err management
+    std::string RequestHandler::getErrorPageFullPath(int statusCode, const Location* location, const Server* server) const;
+    std::string RequestHandler::join(const std::vector<std::string>& elements, const std::string& delimiter) const;
+
+
+
     const Config& config_;
     const std::vector<Server*>& associatedServers_;
 };

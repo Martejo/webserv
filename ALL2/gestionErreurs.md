@@ -2,8 +2,13 @@
 Situations possibles :
 
 Requête malformée : Le client envoie une requête HTTP avec une syntaxe incorrecte, ce qui empêche le serveur de la comprendre. Par exemple, une ligne de requête incomplète ou des en-têtes mal formatés.
+
 echo -e "GET / HTTP/1.1\nHost: 127.0.0.1:9090\n\n" | nc 127.0.0.1 9090
+//entete host vide
 curl -v http://127.0.0.1:9090 -H "Host:"
+//sans entete host
+curl -v --http1.1 http://127.0.0.1:9090 -H "Host"
+
 
 En-têtes invalides : Les en-têtes de la requête contiennent des valeurs invalides ou incohérentes, comme un en-tête Content-Length négatif ou non numérique.
 curl -v -X POST http://127.0.0.1:9090 -H "Content-Length: -10" -d "test"

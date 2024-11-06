@@ -6,6 +6,6 @@
 #include "Server.hpp"
 #include "HttpResponse.hpp"
 
-HttpResponse handleError(int statusCode, const Server* server);
+HttpResponse handleError(int statusCode, conststd::string &errorPagePath); 
 
 #endif // ERROR_HPP

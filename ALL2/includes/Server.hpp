@@ -32,12 +32,12 @@ public:
     const std::vector<std::string> &getServerNames() const;
     const std::string &getRoot() const;
     const std::string &getIndex() const;
-    const std::map<int, std::string> &getErrorPages() const;
     size_t getClientMaxBodySize() const;
 
 
-    // Nouvelle méthode pour obtenir une page d'erreur spécifique
-    std::string getErrorPage(int errorCode) const;
+    const std::map<int, std::string> &getErrorPages() const;
+    const std::string &getErrorPage(int errorCode) const;
+    const std::string &getErrorPageFullPath(int errorCode) const;
 
     void addLocation(const Location &location);
     const std::vector<Location> &getLocations() const;

@@ -91,7 +91,7 @@ const std::map<int, std::string> &Server::getErrorPages() const
         return config_.getErrorPages();
 }
 
-std::string Server::getErrorPage(int errorCode) const
+const std::string& Server::getErrorPage(int errorCode) const
 {
     std::map<int, std::string>::const_iterator it = errorPages_.find(errorCode);
     if (it != errorPages_.end())
@@ -99,6 +99,12 @@ std::string Server::getErrorPage(int errorCode) const
     else
         return config_.getErrorPage(errorCode);
 }
+
+const std::string& Config::getErrorPageFullPath(int errorCode) const
+{
+    return(getRoot() + getErrorPage(errorCode));
+}
+
 
 size_t Server::getClientMaxBodySize() const
 {

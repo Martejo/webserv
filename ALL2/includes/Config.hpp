@@ -20,9 +20,8 @@ public:
 
     void addErrorPage(int statusCode, const std::string &uri);
     const std::map<int, std::string> &getErrorPages() const;
-
-    // New method to get a specific error page
-    std::string getErrorPage(int errorCode) const;
+    const std::string &getErrorPage(int errorCode) const;
+    const std::string &getErrorPageFullPath(int errorCode) const;
 
     void setRoot(const std::string &root);
     const std::string &getRoot() const;
@@ -42,6 +41,7 @@ private:
     std::string root_;
     std::string index_;
     std::vector<Server*> servers_;
+
 };
 
 #endif // CONFIG_HPP

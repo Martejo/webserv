@@ -54,7 +54,8 @@ public:
     // Méthodes pour gérer les pages d'erreur
     void addErrorPage(int statusCode, const std::string &uri);
     const std::map<int, std::string> &getErrorPages() const;
-    std::string getErrorPage(int errorCode) const;
+    const std::string &getErrorPage(int errorCode) const;
+    const std::string &getErrorPageFullPath(int errorCode) const;
 
     // DEBUG
     void displayLocation() const;

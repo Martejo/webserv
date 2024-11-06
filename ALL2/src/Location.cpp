@@ -159,7 +159,7 @@ const std::map<int, std::string> &Location::getErrorPages() const
         return server_.getErrorPages();
 }
 
-std::string Location::getErrorPage(int errorCode) const
+const std::string &Location::getErrorPage(int errorCode) const
 {
     std::map<int, std::string>::const_iterator it = errorPages_.find(errorCode);
     if (it != errorPages_.end())
@@ -167,6 +167,12 @@ std::string Location::getErrorPage(int errorCode) const
     else
         return server_.getErrorPage(errorCode);
 }
+
+const std::string& Config::getErrorPageFullPath(int errorCode) const
+{
+    return(getRoot() + getErrorPage(errorCode));
+}
+
 
 bool Location::getRootIsSet() const
 {

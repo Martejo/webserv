@@ -37,13 +37,18 @@ const std::map<int, std::string> &Config::getErrorPages() const
     return errorPages_;
 }
 
-std::string Config::getErrorPage(int errorCode) const
+const std::string& Config::getErrorPage(int errorCode) const
 {
     std::map<int, std::string>::const_iterator it = errorPages_.find(errorCode);
     if (it != errorPages_.end())
         return it->second;
     else
-        return ""; // Ou une valeur par défaut si nécessaire
+        return ""; 
+}
+
+const std::string& Config::getErrorPageFullPath(int errorCode) const
+{
+    return(getRoot() + getErrorPage(errorCode));
 }
 
 void Config::setRoot(const std::string &root)
